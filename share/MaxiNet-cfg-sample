@@ -1,0 +1,21 @@
+; place this at ~/.MaxiNet.cfg
+[all]
+password = HAEC_EMULATOR
+controller = 10.0.1.11:6633
+logLevel = DEBUG       ; Either CRITICAL, ERROR, WARNING, INFO  or DEBUG
+port_ns = 9090         ; Nameserver port
+port_sshd = 5345       ; Port where MaxiNet will start an ssh server on each worker
+runWith1500MTU = True  ; Set this to True if your physical network can not handle MTUs >1500.
+useMultipleIPs = 0     ; for RSS load balancing. Set to n > 0 to use multiple IP addresses per worker. More information on this feature can be found at MaxiNets github Wiki.
+deactivateTSO = True   ; Deactivate TCP-Segmentation-Offloading at the emulated hosts.
+sshuser = vagrant      ; On Debian set this to root. On ubuntu set this to user which can do passwordless sudo
+usesudo =  True        ; If sshuser is set to something different than root set this to True.
+useSTT = False         ; enables stt usage for tunnels. Only usable with OpenVSwitch. Bandwithlimitations etc do not work on STT tunnels!
+
+[FrontendServer]
+ip = 10.0.1.11
+threadpool = 256       ; increase if more workers are needed (each Worker requires 2 threads on the FrontendServer)
+
+[worker]
+ip = 10.0.1.12
+share = 1
