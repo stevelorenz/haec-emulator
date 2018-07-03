@@ -7,4 +7,11 @@
 About: Test ping with Cube tology for containers
 """
 
-import haecemu
+from haecemu.topolib import CubeTopo
+from haecemu.manager import Manager
+
+if __name__ == '__main__':
+    topo = CubeTopo()
+    mgr = Manager()
+
+    mgr.run_controller(topo)
