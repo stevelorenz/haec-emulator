@@ -4,7 +4,7 @@
 #
 
 """
-About: Test ping with Cube tology for containers
+About: Test ping with Cube topology with Docker containers
 """
 
 from haecemu.manager import Manager
@@ -17,19 +17,19 @@ if __name__ == '__main__':
 
     try:
         exp = mgr.setup(topo)
-        print("# All hosts: ")
+        print("# All processors: ")
         print(topo.hosts())
 
         # First host ping all rest hosts
-        h0 = topo.hosts()[0]
-        print(exp.get_node(h0).cmd("ip addr"))
+        p0 = topo.hosts()[0]
+        print(exp.get_node(p0).cmd("ip addr"))
 
-        for h in topo.hosts()[1:]:
-            dst_node = exp.get_node(h)
-            dst_ip = dst_node.IP()
-            print("Destination IP: {}".format(dst_ip))
+        for p in topo.hosts()[1:]:
+            dst_p_node = exp.get_node(p)
+            dst_ip = dst_p_node.IP()
+            print("Destination Processor IP: {}".format(dst_ip))
             print("Ping result:")
-            print(exp.get_node(h0).cmd("ping -c 3 {}".format(dst_ip)))
+            print(exp.get_node(p0).cmd("ping -c 3 {}".format(dst_ip)))
 
     finally:
         mgr.cleanup()

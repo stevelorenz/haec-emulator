@@ -30,7 +30,7 @@ class CubeTopo(Topo):
         """Build the Cube topology."""
         for layer in range(1, 4):
             ip_tpl = '10.%d.%d.%d'
-            host_tpl = 'h%d%d%d'
+            host_tpl = 'p%d%d%d'
             switch_tpl = 's%d%d%d'
             switch_lt = []
             # Create all hosts and switches, also connections between them
