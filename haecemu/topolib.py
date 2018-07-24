@@ -7,23 +7,72 @@
 About: Topology library for HAEC emulator
 """
 
+import re
 from random import randint
 
 from haecemu import log
 from MaxiNet.Frontend.container import Docker
 from mininet.topo import Topo
-from MaxiNet.tools import FatTree
 
 logger = log.logger
 
 
-class FatTree(FatTree):
+def rand_byte(self, max=255):
+    return hex(randint(0, max))[2:]
+
+
+def make_mac(self, idx):
+    return "00:" + self.rand_byte() + ":" + \
+        self.rand_byte() + ":00:00:" + hex(idx)[2:]
+
+
+def make_dpid(self, i):
+    a = self.make_mac(i)
+    dp = "".join(re.findall(r'[a-f0-9]+', a))
+    return "0" * (16 - len(dp)) + dp
+
+
+class FatTree(Topo):
 
     ctl_prog = "ryu_l2_switch.py"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
+        self._hosts = hosts
+        self._bwlimit = bwlimit
+        self._lat = lat
         super(FatTree, self).__init__(*args, **kwargs)
         logger.info("[TOPO] FatTree is built.")
+
+    def build(self):
+        tor = []
+        bw = self._bwlimit
+        s = 1
+        for i in range(self._hosts):
+            h = self.addHost(
+                'h' + str(i + 1), mac=self.make_mac(i),
+                ip="10.0.0." + str(i + 1), cls=Docker,
+                dimage="ubuntu:trusty"
+            )
+            sw = self.addSwitch('s' + str(s), dpid=self.make_dpid(s),
+                                **dict(listenPort=(13000 + s - 1)))
+            s = s + 1
+            self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
+            tor.append(sw)
+        toDo = tor  # nodes that have to be integrated into the tree
+        while len(toDo) > 1:
+            newToDo = []
+            for i in range(0, len(toDo), 2):
+                sw = self.addSwitch('s' + str(s), dpid=self.make_dpid(s),
+                                    **dict(listenPort=(13000 + s - 1)))
+                s = s + 1
+                newToDo.append(sw)
+                self.addLink(toDo[i], sw, bw=bw,
+                             delay=str(self._lat) + "ms")
+                if len(toDo) > (i + 1):
+                    self.addLink(toDo[i + 1], sw, bw=bw,
+                                 delay=str(self._lat) + "ms")
+            toDo = newToDo
+            bw = 2.0 * bw
 
 
 class CubeTopo(Topo):

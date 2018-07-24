@@ -19,6 +19,7 @@ import requests
 from haecemu import log
 from haecemu import worker
 from MaxiNet.Frontend import maxinet
+from MaxiNet.Frontend import cli
 from mininet.node import OVSSwitch
 
 log.conf_logger('DEBUG')
@@ -190,5 +191,22 @@ class Emulator(object):
 
         logger.info("Exit monitoring loop")
 
+    # --- Simple Experiments ---
+
     def ping_all(self):
-        pass
+        sent = 0.0
+        received = 0.0
+        for host in self._exp.hosts:
+            for target in self._exp.hosts:
+                if(target == host):
+                    continue
+                sys.stdout.write(host.name + " -> " + target.name)
+                sent += 1.0
+                if(host.pexec("ping -c 3 " + target.IP())[2] != 0):
+                    print(" X")
+                else:
+                    received += 1.0
+                    print()
+
+        logger.info("*** Results: %.2f%% dropped (%d/%d received)" %
+                    ((1.0 - received / sent) * 100.0, int(received), int(sent)))

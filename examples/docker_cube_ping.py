@@ -1,35 +1,25 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
-# vim:fenc=utf-8
-#
-
+#!/usr/bin/env python2
 """
-About: Test ping with Cube topology with Docker containers
+About: Simple ping with Cube topology
 """
 
-from haecemu.manager import Manager
+import time
+
+from haecemu.emulator import Emulator
 from haecemu.topolib import CubeTopo
 
-if __name__ == '__main__':
+# Use httpbin just for test HTTP requests
+emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
+emu._url_create_flow = "put"
+emu._url_push_processor_info = "put"
 
+try:
     topo = CubeTopo()
-    mgr = Manager()
+    exp = emu.setup(topo)
+    print("All hosts: %s".format(",".join(topo.hosts())))
+    emu.ping_all()
+    time.sleep(3)
+    emu.run_monitor()
 
-    try:
-        exp = mgr.setup(topo)
-        print("# All processors: ")
-        print(topo.hosts())
-
-        # First host ping all rest hosts
-        p0 = topo.hosts()[0]
-        print(exp.get_node(p0).cmd("ip addr"))
-
-        for p in topo.hosts()[1:]:
-            dst_p_node = exp.get_node(p)
-            dst_ip = dst_p_node.IP()
-            print("Destination Processor IP: {}".format(dst_ip))
-            print("Ping result:")
-            print(exp.get_node(p0).cmd("ping -c 3 {}".format(dst_ip)))
-
-    finally:
-        mgr.cleanup()
+finally:
+    emu.cleanup()
