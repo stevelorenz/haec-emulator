@@ -1,10 +1,10 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
 #
 
 """
-About: Topology lib for HAEC Emulator
+About: Topology library for HAEC emulator
 """
 
 from random import randint
@@ -12,25 +12,33 @@ from random import randint
 from haecemu import log
 from MaxiNet.Frontend.container import Docker
 from mininet.topo import Topo
+from MaxiNet.tools import FatTree
 
 logger = log.logger
+
+
+class FatTree(FatTree):
+
+    ctl_prog = "ryu_l2_switch.py"
+
+    def __init__(self, *args, **kwargs):
+        super(FatTree, self).__init__(*args, **kwargs)
+        logger.info("[TOPO] FatTree is built.")
 
 
 class CubeTopo(Topo):
 
     ctl_prog = "ryu_cube.py"
 
-    def __init__(self, **args):
-        Topo.__init__(self, **args)
+    def __init__(self, *args, **kwargs):
         self.switch_dict = {}
-        self._build_topo()
+        super(CubeTopo, self).__init__(*args, **kwargs)
         logger.info("[TOPO] CubeTopo is built.")
 
-    def _build_topo(self):
-        """Build the Cube topology."""
+    def build(self, layer_num=3):
         for layer in range(1, 4):
             ip_tpl = '10.%d.%d.%d'
-            host_tpl = 'p%d%d%d'
+            host_tpl = 'h%d%d%d'
             switch_tpl = 's%d%d%d'
             switch_lt = []
             # Create all hosts and switches, also connections between them
@@ -46,7 +54,7 @@ class CubeTopo(Topo):
                     switch_name = switch_tpl % (layer, row, col)
                     new_switch = self.addSwitch(
                         switch_name,
-                        # MARK: The supported length of DPID for MaxiNet is 12
+                        # MARK: The supported length of DPID in MaxiNet is 12
                         dpid="000000000%d%d%d" % (layer, row, col)
                     )
                     # Add link between host and switches

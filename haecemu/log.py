@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # vim:fenc=utf-8
 
@@ -24,12 +24,12 @@ LEVELS = {
 }
 
 FORMAT = {
-    'default': '%(asctime)s %(message)s',
-    'DEFAULT': '%(asctime)s %(message)s',
-    'debug': '%(asctime)s %(levelname)-8s %(module)s %(threadName)s %(lineno)d %(message)s',
-    'DEBUG': '%(asctime)s %(levelname)-8s %(module)s %(threadName)s %(lineno)d %(message)s',
-    'info': '%(asctime)s %(levelname)-8s %(module)s %(message)s',
-    'INFO': '%(asctime)s %(levelname)-8s %(module)s %(message)s'
+    'default': '%(asctime)s [HAECEMU] %(message)s',
+    'DEFAULT': '%(asctime)s [HAECEMU] %(message)s',
+    'debug': '%(asctime)s %(levelname)-8s %(module)s %(threadName)s %(lineno)d [HAECEMU] %(message)s',
+    'DEBUG': '%(asctime)s %(levelname)-8s %(module)s %(threadName)s %(lineno)d [HAECEMU] %(message)s',
+    'info': '%(asctime)s %(levelname)-8s %(module)s [HAECEMU] %(message)s',
+    'INFO': '%(asctime)s %(levelname)-8s %(module)s [HAECEMU] %(message)s'
 }
 
 

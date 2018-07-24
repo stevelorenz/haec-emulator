@@ -18,15 +18,13 @@ An OpenFlow 1.0 L2 learning switch implementation.
 """
 
 
+from ryu.app.wsgi import ControllerBase, Response, WSGIApplication, route
 from ryu.base import app_manager
 from ryu.controller import ofp_event
-from ryu.controller.handler import MAIN_DISPATCHER
-from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_0
+from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls
 from ryu.lib.mac import haddr_to_bin
-from ryu.lib.packet import packet
-from ryu.lib.packet import ethernet
-from ryu.lib.packet import ether_types
+from ryu.lib.packet import ether_types, ethernet, packet
+from ryu.ofproto import ofproto_v1_0
 
 
 class SimpleSwitch(app_manager.RyuApp):
@@ -35,6 +33,7 @@ class SimpleSwitch(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
+        self.typed_flows = {}  # Use cookie to identify each flow
 
     def add_flow(self, datapath, in_port, dst, src, actions):
         ofproto = datapath.ofproto
@@ -48,6 +47,7 @@ class SimpleSwitch(app_manager.RyuApp):
             command=ofproto.OFPFC_ADD, idle_timeout=0, hard_timeout=0,
             priority=ofproto.OFP_DEFAULT_PRIORITY,
             flags=ofproto.OFPFF_SEND_FLOW_REM, actions=actions)
+
         datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -101,10 +101,15 @@ class SimpleSwitch(app_manager.RyuApp):
 
         ofproto = msg.datapath.ofproto
         if reason == ofproto.OFPPR_ADD:
-            self.logger.info("port added %s", port_no)
+            self.logger.debug("port added %s", port_no)
         elif reason == ofproto.OFPPR_DELETE:
-            self.logger.info("port deleted %s", port_no)
+            self.logger.debug("port deleted %s", port_no)
         elif reason == ofproto.OFPPR_MODIFY:
-            self.logger.info("port modified %s", port_no)
+            self.logger.debug("port modified %s", port_no)
         else:
-            self.logger.info("Illeagal port state %s %s", port_no, reason)
+            self.logger.debug("Illeagal port state %s %s", port_no, reason)
+
+
+app_manager.require_app('ryu.app.rest_topology')
+app_manager.require_app('ryu.app.ws_topology')
+app_manager.require_app('ryu.app.ofctl_rest')
