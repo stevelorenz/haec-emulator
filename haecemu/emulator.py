@@ -40,7 +40,8 @@ class Emulator(object):
 
     _ofctl_url = "http://localhost:8080"
 
-    def __init__(self, mode="emu", remote_base_url=""):
+    def __init__(self, mode="emu", remote_base_url="",
+                 host_type="proc"):
         """Init HAEC emulator
 
         :param remote_base_url: Base URL of the remote frontend
@@ -48,6 +49,7 @@ class Emulator(object):
         self._load_config()
         self._remote_base_url = remote_base_url
         self._mode = mode
+        self._host_type = "proc"
 
         self._ctl_prog = None
         self._exp = None

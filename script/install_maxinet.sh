@@ -6,27 +6,54 @@ echo "MaxiNet 1.2 installer"
 echo ""
 echo "This program installs MaxiNet 1.2 and all requirements to the home directory of your user"
 
-echo "installing required dependencies."
+echo "Installing required dependencies."
 
 sudo apt-get install -y git autoconf screen cmake build-essential sysstat python-matplotlib uuid-runtime
 
-# Containernet
-sudo apt-get install -y ansible aptitude
-# Patch config file if necessary
-grep "localhost ansible_connection=local" /etc/ansible/hosts >/dev/null
-if [ $? -ne 0 ]; then
-    echo "localhost ansible_connection=local" | sudo tee -a /etc/ansible/hosts
+if [[ $1 = "-cn" ]]; then
+    echo "Installing Containernet"
+    # Containernet
+    sudo apt-get install -y ansible aptitude
+    # Patch config file if necessary
+    grep "localhost ansible_connection=local" /etc/ansible/hosts >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "localhost ansible_connection=local" | sudo tee -a /etc/ansible/hosts
+    fi
+
+    cd ~
+    sudo rm -rf containernet &> /dev/null
+    sudo rm -rf oflops &> /dev/null
+    sudo rm -rf oftest &> /dev/null
+    sudo rm -rf openflow &> /dev/null
+    sudo rm -rf pox &> /dev/null
+    git clone https://github.com/containernet/containernet
+    cd containernet/ansible
+    sudo ansible-playbook install.yml
+else
+    echo "Installing Mininet"
+    cd ~
+    sudo rm -rf openflow &> /dev/null
+    sudo rm -rf loxigen &> /dev/null
+    sudo rm -rf pox &> /dev/null
+    sudo rm -rf oftest &> /dev/null
+    sudo rm -rf oflops &> /dev/null
+    sudo rm -rf ryu &> /dev/null
+    sudo rm -rf mininet &> /dev/null
+
+    git clone https://github.com/mininet/mininet
+    cd mininet
+    git checkout -b 2.2.1rc1 2.2.1rc1
+    cd util/
+    ./install.sh
+
+    # the mininet installer sometimes crashes with a zipimport.ZipImportError.
+    # In that case, we retry installation.
+    if [ "$?" != "0" ]
+    then
+        ./install.sh
+    fi
 fi
 
-cd ~
-sudo rm -rf containernet &> /dev/null
-sudo rm -rf oflops &> /dev/null
-sudo rm -rf oftest &> /dev/null
-sudo rm -rf openflow &> /dev/null
-sudo rm -rf pox &> /dev/null
-git clone https://github.com/containernet/containernet
-cd containernet/ansible
-sudo ansible-playbook install.yml
 
 # Metis
 cd ~

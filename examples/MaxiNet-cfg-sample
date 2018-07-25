@@ -16,6 +16,10 @@ useSTT = False         ; enables stt usage for tunnels. Only usable with OpenVSw
 ip = 10.0.1.11
 threadpool = 256       ; increase if more workers are needed (each Worker requires 2 threads on the FrontendServer)
 
+[frontend]
+ip = 10.0.1.11
+share = 1
+
 [worker]
 ip = 10.0.1.12
 share = 1
