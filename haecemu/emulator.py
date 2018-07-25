@@ -7,6 +7,8 @@
 About: HAEC emulator
 """
 
+import json
+import shlex
 import signal
 import subprocess
 import sys
@@ -16,16 +18,14 @@ from urlparse import urljoin
 
 import requests
 
-from haecemu import log
-from haecemu import worker
+from haecemu import log, worker
 from MaxiNet.Frontend import maxinet
-from MaxiNet.Frontend import cli
 from mininet.node import OVSSwitch
 
-log.conf_logger('DEBUG')
-
 logger = log.logger
+
 CTL_PROG_PATH = path.join(path.expanduser("~"), ".haecemu", "controller")
+CONFIG_PATH = path.join(path.expanduser("~"), ".haecemu", "config.json")
 
 
 class Emulator(object):
@@ -45,6 +45,7 @@ class Emulator(object):
 
         :param remote_base_url: Base URL of the remote frontend
         """
+        self._load_config()
         self._remote_base_url = remote_base_url
         self._mode = mode
 
@@ -57,6 +58,11 @@ class Emulator(object):
                       self._url_push_processor_info
                       ])
         ))
+
+    def _load_config(self):
+        with open(CONFIG_PATH) as config_file:
+            configs = json.load(config_file)
+        log.conf_logger(level=configs['log']['level'])
 
     @staticmethod
     def _signal_exit(signal, frame):
@@ -110,11 +116,22 @@ class Emulator(object):
         return workload
 
     def _query_power(self, host_id):
-        worker = self._exp.get_worker(host_id)
-        # Use subprocess
+        worker_ip = self._exp.get_worker(host_id).ip()
+        cmd = "./ina231_TCP -sample -host {}".format(worker_ip)
+        out = subprocess.check_output(shlex.split(cmd))
+        return out
 
     def _query_temperature(self, host_id):
-        worker = self._exp.get_worker(host_id)
+        """Query temperature of the remote worker"""
+        pass
+
+    # --- Topo Mapping --
+
+    def map_topo(self, mode="1on1"):
+        """Map topology on workers
+
+        :param mode:
+        """
         pass
 
     # --- Public API ---
@@ -162,7 +179,7 @@ class Emulator(object):
             proc_md['temperature'] = 30
             proc_md['power'] = 30
         else:
-            proc_md['temperature'] = self._query_temperature(host_id)
+            proc_md['temperature'] = 30
             proc_md['power'] = self._query_power(host_id)
         r = requests.put(req_url, data=proc_md)
         logger.info("Status code: {}, text: {}".format(r.status_code, r.text))
@@ -173,6 +190,8 @@ class Emulator(object):
     def run_task_bg(self, host_id, cmd):
         node = self._exp.get_node(host_id)
         ret = node.cmd("{} > /dev/null 2>&1 &".format(cmd))
+        if ret != 0:
+            pass
 
     def stop_task_bg(self, host_id, cmd):
         node = self._exp.get_node(host_id)
@@ -200,13 +219,14 @@ class Emulator(object):
             for target in self._exp.hosts:
                 if(target == host):
                     continue
-                sys.stdout.write(host.name + " -> " + target.name)
+                print("{} -> {}".format(host.name, target.name))
                 sent += 1.0
                 if(host.pexec("ping -c 3 " + target.IP())[2] != 0):
                     print(" X")
                 else:
                     received += 1.0
                     print()
-
-        logger.info("*** Results: %.2f%% dropped (%d/%d received)" %
-                    ((1.0 - received / sent) * 100.0, int(received), int(sent)))
+        print(
+            "Ping All Results: {:.2f} dropped, ({}/{} received)".format(
+                (1.0 - received / sent) * 100.0, int(received), int(sent))
+        )

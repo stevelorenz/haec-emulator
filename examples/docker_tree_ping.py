@@ -9,7 +9,7 @@ from haecemu.emulator import Emulator
 from haecemu.topolib import FatTree
 
 # Use httpbin just for test HTTP requests
-emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
+emu = Emulator(mode="emu", remote_base_url="http://httpbin.org")
 emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 

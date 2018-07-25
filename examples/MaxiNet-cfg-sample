@@ -2,7 +2,7 @@
 [all]
 password = HAEC_EMULATOR
 controller = 10.0.1.11:6633
-logLevel = DEBUG       ; Either CRITICAL, ERROR, WARNING, INFO  or DEBUG
+logLevel = INFO        ; Either CRITICAL, ERROR, WARNING, INFO  or DEBUG
 port_ns = 9090         ; Nameserver port
 port_sshd = 5345       ; Port where MaxiNet will start an ssh server on each worker
 runWith1500MTU = True  ; Set this to True if your physical network can not handle MTUs >1500.

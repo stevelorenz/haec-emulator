@@ -17,17 +17,17 @@ from mininet.topo import Topo
 logger = log.logger
 
 
-def rand_byte(self, max=255):
+def rand_byte(max=255):
     return hex(randint(0, max))[2:]
 
 
-def make_mac(self, idx):
-    return "00:" + self.rand_byte() + ":" + \
-        self.rand_byte() + ":00:00:" + hex(idx)[2:]
+def make_mac(idx):
+    return "00:" + rand_byte() + ":" + \
+        rand_byte() + ":00:00:" + hex(idx)[2:]
 
 
-def make_dpid(self, i):
-    a = self.make_mac(i)
+def make_dpid(idx):
+    a = make_mac(idx)
     dp = "".join(re.findall(r'[a-f0-9]+', a))
     return "0" * (16 - len(dp)) + dp
 
@@ -36,10 +36,13 @@ class FatTree(Topo):
 
     ctl_prog = "ryu_l2_switch.py"
 
-    def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
+    def __init__(self, hosts, bwlimit=10, lat=0.1,
+                 dimage="ubuntu:trusty",
+                 * args, **kwargs):
         self._hosts = hosts
         self._bwlimit = bwlimit
         self._lat = lat
+        self._dimage = dimage
         super(FatTree, self).__init__(*args, **kwargs)
         logger.info("[TOPO] FatTree is built.")
 
@@ -49,11 +52,11 @@ class FatTree(Topo):
         s = 1
         for i in range(self._hosts):
             h = self.addHost(
-                'h' + str(i + 1), mac=self.make_mac(i),
+                'h' + str(i + 1), mac=make_mac(i),
                 ip="10.0.0." + str(i + 1), cls=Docker,
-                dimage="ubuntu:trusty"
+                dimage=self._dimage
             )
-            sw = self.addSwitch('s' + str(s), dpid=self.make_dpid(s),
+            sw = self.addSwitch('s' + str(s), dpid=make_dpid(s),
                                 **dict(listenPort=(13000 + s - 1)))
             s = s + 1
             self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
@@ -62,7 +65,7 @@ class FatTree(Topo):
         while len(toDo) > 1:
             newToDo = []
             for i in range(0, len(toDo), 2):
-                sw = self.addSwitch('s' + str(s), dpid=self.make_dpid(s),
+                sw = self.addSwitch('s' + str(s), dpid=make_dpid(s),
                                     **dict(listenPort=(13000 + s - 1)))
                 s = s + 1
                 newToDo.append(sw)
@@ -79,12 +82,18 @@ class CubeTopo(Topo):
 
     ctl_prog = "ryu_cube.py"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dimage="ubuntu:trusty",
+                 *args, **kwargs):
+        self._dimage = dimage
         self.switch_dict = {}
         super(CubeTopo, self).__init__(*args, **kwargs)
         logger.info("[TOPO] CubeTopo is built.")
 
     def build(self, layer_num=3):
+        """Build Cube topology
+
+        :param layer_num (int): Number of layers
+        """
         for layer in range(1, 4):
             ip_tpl = '10.%d.%d.%d'
             host_tpl = 'h%d%d%d'
@@ -97,7 +106,7 @@ class CubeTopo(Topo):
                     host_name = host_tpl % (layer, row, col)
                     new_host = self.addHost(
                         host_name,
-                        cls=Docker, dimage="ubuntu:trusty",
+                        cls=Docker, dimage=self._dimage,
                         ip=ip_tpl % (layer, row, col)
                     )
                     switch_name = switch_tpl % (layer, row, col)

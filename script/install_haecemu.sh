@@ -22,6 +22,9 @@ echo "## Copy controller programs to $CONFIG_DIR/controller"
 cp -r -T "$HAECEMU_DIR/controller" "$CONFIG_DIR/controller"
 
 echo "## Copy MaxiNet config file"
-cp "$HAECEMU_DIR/examples/MaxiNet-cfg-sample" "$HOME/.MaxiNet.cfg"
+cp -T "$HAECEMU_DIR/examples/MaxiNet-cfg-sample" "$HOME/.MaxiNet.cfg"
+
+echo "## Copy HAECEMU config file"
+cp -T "$HAECEMU_DIR/examples/config.json" "$CONFIG_DIR/config.json"
 
 echo "# Installation finished."
