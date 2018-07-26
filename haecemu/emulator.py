@@ -28,6 +28,11 @@ CTL_PROG_PATH = path.join(path.expanduser("~"), ".haecemu", "controller")
 CONFIG_PATH = path.join(path.expanduser("~"), ".haecemu", "config.json")
 
 
+# --- Just for tests ---
+POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
+TEMPERATURE_OUTPUT = u""
+
+
 class Emulator(object):
     """HAEC Emulator
 
@@ -82,7 +87,7 @@ class Emulator(object):
             "ryu run {} & > /dev/null 2>&1".format(
                 self._ctl_prog),
             shell=True)
-        time.sleep(3)
+        time.sleep(10)
         logger.info("Controller program {} is running.".format(self._ctl_prog))
 
     def _stop_controller(self):
@@ -119,13 +124,23 @@ class Emulator(object):
 
     def _query_power(self, host_id):
         worker_ip = self._exp.get_worker(host_id).ip()
-        cmd = "./ina231_TCP -sample -host {}".format(worker_ip)
-        out = subprocess.check_output(shlex.split(cmd))
-        return out
+        cmd = "ina231_TCP -sample -host {}".format(worker_ip)
+        if self._mode == "test":
+            out = POWER_OUTPUT
+        else:
+            out = subprocess.check_output(shlex.split(cmd)).decode('utf-8')
+        power = float(out.splitlines()[1][3:-1])
+        return power
 
     def _query_temperature(self, host_id):
         """Query temperature of the remote worker"""
-        pass
+        if self._mode == "test":
+            temp = 30
+        else:
+            temp = self._exp.get_node(host_id).cmd(
+                "cat /sys/devices/virtual/thermal/thermal_zone0/temp").strip()
+            temp = int(temp / 1000.0)
+        return temp
 
     # --- Topo Mapping --
 
@@ -182,12 +197,8 @@ class Emulator(object):
                           self._url_push_processor_info)
         proc_md['processor_id'] = host_id
         proc_md['workload'] = self._query_workload(host_id)
-        if self._mode == "test":
-            proc_md['temperature'] = 30
-            proc_md['power'] = 30
-        else:
-            proc_md['temperature'] = 30
-            proc_md['power'] = self._query_power(host_id)
+        proc_md['temperature'] = self._query_temperature(host_id)
+        proc_md['power'] = self._query_power(host_id)
         r = requests.put(req_url, data=proc_md)
         logger.info("Status code: {}, text: {}".format(r.status_code, r.text))
 
@@ -209,10 +220,8 @@ class Emulator(object):
         signal.signal(signal.SIGINT, self._signal_exit)
         logger.info("Enter monitoring loop...")
         while True:
-
             for host_id in self._topo.hosts():
                 self.push_processor(host_id)
-
             time.sleep(3)
 
         logger.info("Exit monitoring loop")

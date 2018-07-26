@@ -11,8 +11,12 @@ import re
 from random import randint
 
 from haecemu import log
-from MaxiNet.Frontend.container import Docker
 from mininet.topo import Topo
+
+try:
+    from MaxiNet.Frontend.container import Docker
+except ImportError:
+    pass
 
 logger = log.logger
 
