@@ -8,6 +8,7 @@
 About: Manage HAEC emualator on HAEC playground with fabric
 
  MARK:
+    - All operations are written in a single fabfile
     - Use fabric 1
 """
 
@@ -75,7 +76,8 @@ def get_workers(network=""):
         ]
         print("Store workers in workers.txt file")
         with open("./workers.txt", "w+") as f:
-            f.writelines(workers)
+            for worker in workers:
+                f.write("{}\n".format(worker))
 
     else:
         print("No available workers.")
@@ -127,9 +129,12 @@ def gen_mxn_config():
     pass
 
 
-def install_mxn():
+@task
+def install_mxn(mn_type="mininet"):
     """Install MaxiNet on workers"""
-    pass
+    with settings(hide('warnings', 'running'), warn_only=True):
+        run("git clone https://github.com/stevelorenz/haec-emulator.git ~/haec-emulator")
+        run("bash ~/haec-emualator/script/install_maxinet.sh")
 
 
 @task

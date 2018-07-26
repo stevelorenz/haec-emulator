@@ -14,7 +14,7 @@ emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = CubeTopo()
+    topo = CubeTopo(host_type="process")
     exp = emu.setup(topo)
     print("All hosts: %s".format(",".join(topo.hosts())))
     emu.ping_all()

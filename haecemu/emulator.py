@@ -79,7 +79,7 @@ class Emulator(object):
         self._ctl_prog = path.join(CTL_PROG_PATH, topo.ctl_prog)
         logger.debug('Current controller program: {}'.format(self._ctl_prog))
         subprocess.check_call(
-            "ryu run --observe-links {} & > /dev/null 2>&1".format(
+            "ryu run {} & > /dev/null 2>&1".format(
                 self._ctl_prog),
             shell=True)
         time.sleep(3)
@@ -147,8 +147,13 @@ class Emulator(object):
         self._topo = topo
         self._run_controller(topo)
         cluster = maxinet.Cluster()
-        self._exp = maxinet.Experiment(cluster, topo, switch=switch)
-        self._exp.setup()
+        try:
+            self._exp = maxinet.Experiment(cluster, topo, switch=switch)
+            self._exp.setup()
+        except Exception as e:
+            logger.error(e)
+            self._stop_controller()
+            raise e
         return self._exp
 
     def install_pkgs(self, extra_pkgs=list()):
@@ -232,3 +237,6 @@ class Emulator(object):
             "Ping All Results: {:.2f} dropped, ({}/{} received)".format(
                 (1.0 - received / sent) * 100.0, int(received), int(sent))
         )
+
+    def random_iperf_udp(self):
+        pass

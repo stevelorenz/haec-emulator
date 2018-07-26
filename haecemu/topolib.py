@@ -17,6 +17,8 @@ from mininet.topo import Topo
 logger = log.logger
 
 
+#  TODO:  <26-07-18, Zuo> Improve these methods #
+
 def rand_byte(max=255):
     return hex(randint(0, max))[2:]
 
@@ -32,19 +34,39 @@ def make_dpid(idx):
     return "0" * (16 - len(dp)) + dp
 
 
-class FatTree(Topo):
+class BaseTopo(Topo):
+
+    """Base topology class"""
+
+    def __init__(self, host_type="process",
+                 * args, **kwargs):
+        self._host_kargs = {}
+        if host_type == "docker":
+            self._host_kargs["cls"] = Docker
+            self._host_kargs["dimage"] = "ubuntu:trusty"
+            if "dimage" in kwargs:
+                self._host_kargs["dimage"] = kwargs["dimage"]
+
+            logger.info("[TOPO] Use docker containers, with image: {}".format(
+                self._host_kargs["dimage"]
+            ))
+        else:
+            logger.info("[TOPO] Use processes.")
+
+        super(BaseTopo, self).__init__(*args, **kwargs)
+
+
+class SimpleFatTree(BaseTopo):
 
     ctl_prog = "ryu_l2_switch.py"
 
-    def __init__(self, hosts, bwlimit=10, lat=0.1,
-                 dimage="ubuntu:trusty",
-                 * args, **kwargs):
+    def __init__(self, hosts, bwlimit=10, lat=0.1, * args, **kwargs):
+        """Simple fat tree topo with same link latency and bandwidth"""
         self._hosts = hosts
         self._bwlimit = bwlimit
         self._lat = lat
-        self._dimage = dimage
-        super(FatTree, self).__init__(*args, **kwargs)
-        logger.info("[TOPO] FatTree is built.")
+        super(SimpleFatTree, self).__init__(*args, **kwargs)
+        logger.info("[TOPO] SimpleFatTree is built.")
 
     def build(self):
         tor = []
@@ -53,8 +75,8 @@ class FatTree(Topo):
         for i in range(self._hosts):
             h = self.addHost(
                 'h' + str(i + 1), mac=make_mac(i),
-                ip="10.0.0." + str(i + 1), cls=Docker,
-                dimage=self._dimage
+                ip="10.0.0." + str(i + 1),
+                **self._host_kargs
             )
             sw = self.addSwitch('s' + str(s), dpid=make_dpid(s),
                                 **dict(listenPort=(13000 + s - 1)))
@@ -78,22 +100,21 @@ class FatTree(Topo):
             bw = 2.0 * bw
 
 
-class CubeTopo(Topo):
+class CubeTopo(BaseTopo):
 
     ctl_prog = "ryu_cube.py"
 
-    def __init__(self, dimage="ubuntu:trusty",
-                 *args, **kwargs):
-        self._dimage = dimage
+    #  TODO:  <26-07-18, Zuo> Extend it to support variable cubic length #
+    def __init__(self, length=3, *args, **kwargs):
+        if length != 3:
+            raise RuntimeError("Currently only support length 3")
+        self._length = length
         self.switch_dict = {}
         super(CubeTopo, self).__init__(*args, **kwargs)
         logger.info("[TOPO] CubeTopo is built.")
 
-    def build(self, layer_num=3):
-        """Build Cube topology
+    def build(self):
 
-        :param layer_num (int): Number of layers
-        """
         for layer in range(1, 4):
             ip_tpl = '10.%d.%d.%d'
             host_tpl = 'h%d%d%d'
@@ -105,9 +126,7 @@ class CubeTopo(Topo):
                 for col in range(1, 4):
                     host_name = host_tpl % (layer, row, col)
                     new_host = self.addHost(
-                        host_name,
-                        cls=Docker, dimage=self._dimage,
-                        ip=ip_tpl % (layer, row, col)
+                        host_name, ip=ip_tpl % (layer, row, col)
                     )
                     switch_name = switch_tpl % (layer, row, col)
                     new_switch = self.addSwitch(

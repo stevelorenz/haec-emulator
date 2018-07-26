@@ -6,7 +6,7 @@
 HAECEMU = haecemu/*.py
 PYSRC = $(HAECEMU)
 PYCFILE = $(shell find ./ -name '*.pyc')
-TMP_FILE = $(PYCFILE)
+TMP_FILE = $(PYCFILE) build dist *.egg-info
 
 all:
 	@echo "Makefile needs your attention"
@@ -18,7 +18,7 @@ errcheck: $(PYSRC)
 
 cleanup:
 	@echo "Cleanup tempory files"
-	rm -f $(TMP_FILE)
+	rm -rf $(TMP_FILE)
 
 
 # vim:ft=make

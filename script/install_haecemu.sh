@@ -10,10 +10,6 @@ set -o nounset
 HAECEMU_DIR="$( cd -P "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd -P )"
 CONFIG_DIR="$HOME/.haecemu"
 
-# Install dependencies
-sudo apt-get install -y python2-pip
-sudo apt-get install -y fabric
-
 if [[ -d $CONFIG_DIR ]]; then
     echo "## WARN: Default config directory already exists. Remove it."
     rm -rf $CONFIG_DIR
