@@ -18,6 +18,7 @@ from urlparse import urljoin
 
 import requests
 
+import ipdb
 from haecemu import log, worker
 from MaxiNet.Frontend import maxinet
 from mininet.node import OVSSwitch
@@ -29,6 +30,7 @@ CONFIG_PATH = path.join(path.expanduser("~"), ".haecemu", "config.json")
 
 
 # --- Just for tests ---
+
 POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
 TEMPERATURE_OUTPUT = u""
 
@@ -139,7 +141,7 @@ class Emulator(object):
         else:
             temp = self._exp.get_node(host_id).cmd(
                 "cat /sys/devices/virtual/thermal/thermal_zone0/temp").strip()
-            temp = int(temp / 1000.0)
+            temp = int(float(temp) / 1000.0)
         return temp
 
     # --- Topo Mapping --

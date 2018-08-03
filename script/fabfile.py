@@ -35,7 +35,7 @@ WORKER_USER = "odroid"
 SSH_PORT = "22"
 
 with open("./workers.txt", "r") as f:
-    WORKERS = f.readlines()
+    WORKERS = [w.strip() for w in f.readlines()]
     if not WORKERS:
         raise RuntimeError("No available workers.")
 
@@ -124,8 +124,15 @@ def kill_worker():
             count = int(run('pgrep -c MaxiNetWorker').splitlines()[0])
 
 
+@task
 def gen_mxn_config():
     """Generate MaxiNet config file."""
+    pass
+
+
+@parallel
+def get_workers_with_hostname():
+    """Get workers with hostnames used to generate mxn config"""
     pass
 
 
