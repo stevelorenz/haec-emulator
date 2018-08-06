@@ -9,7 +9,7 @@ About: Manage HAEC emualator on HAEC playground with fabric
 
  MARK:
     - All operations are written in a single fabfile
-    - Use fabric 1
+    - Use fabric 1. TODO: Move to fabric 2
 """
 
 from __future__ import with_statement
