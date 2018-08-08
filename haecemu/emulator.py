@@ -18,21 +18,16 @@ from urlparse import urljoin
 
 import requests
 
-import ipdb
-from haecemu import log, worker
+from haecemu import log
 from MaxiNet.Frontend import maxinet
 from mininet.node import OVSSwitch
 
 logger = log.logger
 
+CONFIG_ROOT = path.join(path.expanduser("~"), ".haecemu")
 CTL_PROG_PATH = path.join(path.expanduser("~"), ".haecemu", "controller")
-CONFIG_PATH = path.join(path.expanduser("~"), ".haecemu", "config.json")
-
-
-# --- Just for tests ---
 
 POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
-TEMPERATURE_OUTPUT = u""
 
 
 class Emulator(object):
@@ -48,7 +43,7 @@ class Emulator(object):
     _ofctl_url = "http://localhost:8080"
 
     def __init__(self, mode="emu", remote_base_url="",
-                 host_type="proc"):
+                 host_type="container"):
         """Init HAEC emulator
 
         :param remote_base_url: Base URL of the remote frontend
@@ -56,7 +51,7 @@ class Emulator(object):
         self._load_config()
         self._remote_base_url = remote_base_url
         self._mode = mode
-        self._host_type = "proc"
+        self._host_type = "container"
 
         self._ctl_prog = None
         self._exp = None
@@ -69,9 +64,11 @@ class Emulator(object):
         ))
 
     def _load_config(self):
-        with open(CONFIG_PATH) as config_file:
+        with open(path.join(CONFIG_ROOT, "config.json")) as config_file:
             configs = json.load(config_file)
-        log.conf_logger(level=configs['log']['level'])
+        log.conf_logger(level=configs['log']['level'],
+                        handler=configs['log']['handler']
+                        )
 
     @staticmethod
     def _signal_exit(signal, frame):
@@ -86,15 +83,16 @@ class Emulator(object):
         self._ctl_prog = path.join(CTL_PROG_PATH, topo.ctl_prog)
         logger.debug('Current controller program: {}'.format(self._ctl_prog))
         subprocess.check_call(
-            "ryu run {} & > /dev/null 2>&1".format(
+            "ryu-manager --log-config-file {} {} & > /dev/null 2>&1".format(
+                path.join(CONFIG_ROOT, "ryu_log.ini"),
                 self._ctl_prog),
             shell=True)
-        time.sleep(10)
+        time.sleep(3)
         logger.info("Controller program {} is running.".format(self._ctl_prog))
 
     def _stop_controller(self):
         subprocess.check_call(
-            "sudo killall ryu",
+            "sudo killall ryu-manager",
             shell=True)
 
     def _get_all_flows(self):
@@ -111,9 +109,11 @@ class Emulator(object):
 
     # MARK: TBD if check the data validation for each meta-data dict
 
+    @staticmethod
     def _ck_flow_md(flow_md):
         pass
 
+    @staticmethod
     def _ck_proc_md(proc_md):
         pass
 
@@ -173,9 +173,6 @@ class Emulator(object):
             raise e
         return self._exp
 
-    def install_pkgs(self, extra_pkgs=list()):
-        pass
-
     def cleanup(self):
         """Cleanup an emulation experiment"""
         self._exp.stop()
@@ -202,7 +199,7 @@ class Emulator(object):
         proc_md['temperature'] = self._query_temperature(host_id)
         proc_md['power'] = self._query_power(host_id)
         r = requests.put(req_url, data=proc_md)
-        logger.info("Status code: {}, text: {}".format(r.status_code, r.text))
+        logger.debug("Status code: {}, text: {}".format(r.status_code, r.text))
 
     def mod_processor(self, host_id, opt):
         pass
@@ -217,7 +214,7 @@ class Emulator(object):
         node = self._exp.get_node(host_id)
         node.cmd("killall {}".format(cmd))
 
-    def run_monitor(self, cycle=3):
+    def _run_monitor(self, cycle=3):
         """Run monitoring for flows and processors"""
         signal.signal(signal.SIGINT, self._signal_exit)
         logger.info("Enter monitoring loop...")
@@ -227,6 +224,14 @@ class Emulator(object):
             time.sleep(3)
 
         logger.info("Exit monitoring loop")
+
+    def run_monitor(self, cycle=3):
+        pass
+
+    def cli(self):
+        """CLI"""
+        while True:
+            time.sleep(3)
 
     # --- Simple Experiments ---
 

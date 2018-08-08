@@ -1,0 +1,7 @@
+{
+    "log": {
+        "level": "info",
+        "handler": "rotatingfile"
+    }
+
+}

@@ -28,6 +28,10 @@ echo "## Copy controller programs to $CONFIG_DIR/controller"
 cp -r -T "$HAECEMU_DIR/controller" "$CONFIG_DIR/controller"
 
 echo "## Copy HAECEMU config file"
-cp -T "$HAECEMU_DIR/examples/config.json" "$CONFIG_DIR/config.json"
+cp -T "$HAECEMU_DIR/share/config.json" "$CONFIG_DIR/config.json"
+
+echo "## Copy logging config file"
+cp -T "$HAECEMU_DIR/share/ryu_log.ini" "$CONFIG_DIR/ryu_log.ini"
+mkdir -p "$CONFIG_DIR/log"
 
 echo "# Installation finished."

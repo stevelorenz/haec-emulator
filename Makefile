@@ -12,12 +12,12 @@ all:
 	@echo "Makefile needs your attention"
 
 errcheck: $(PYSRC)
-	@echo "Running check for errors only"
+	@echo "# Running check for errors only"
 	pyflakes $(PYSRC)
 	pylint -E --rcfile=.pylint $(PYSRC)
 
 cleanup:
-	@echo "Cleanup tempory files"
+	@echo "# Cleanup tempory files"
 	rm -rf $(TMP_FILE)
 
 
