@@ -20,6 +20,8 @@ try:
     time.sleep(3)
     emu.run_monitor()
 
+    emu.wait()
+
 except Exception as e:
     print(e)
 

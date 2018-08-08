@@ -8,10 +8,9 @@ About: HAEC emulator
 """
 
 import json
+import multiprocessing
 import shlex
-import signal
 import subprocess
-import sys
 import time
 from os import path
 from urlparse import urljoin
@@ -63,6 +62,12 @@ class Emulator(object):
                       ])
         ))
 
+        # Multiproc for tasks
+        self._worker_procs = []
+        self._mon_proc_proc = multiprocessing.Process(name="processor monitor",
+                                                      target=self._monitor_processor)
+        self._worker_procs.append(self._mon_proc_proc)
+
     def _load_config(self):
         with open(path.join(CONFIG_ROOT, "config.json")) as config_file:
             configs = json.load(config_file)
@@ -70,14 +75,18 @@ class Emulator(object):
                         handler=configs['log']['handler']
                         )
 
-    @staticmethod
-    def _signal_exit(signal, frame):
-        logger.info("Emulator exits.")
-        sys.exit(0)
+    # @staticmethod
+    # def _signal_exit(signal, frame):
+        # logger.info("Emulator exits.")
+        # sys.exit(0)
 
     # --- SDN Controller ---
 
     def _run_controller(self, topo):
+        """Run controller in background
+
+        Commuinicate with Controller through REST API
+        """
         if not hasattr(topo, 'ctl_prog'):
             topo.ctl_prog = 'ryu_l2_switch.py'
         self._ctl_prog = path.join(CTL_PROG_PATH, topo.ctl_prog)
@@ -175,8 +184,20 @@ class Emulator(object):
 
     def cleanup(self):
         """Cleanup an emulation experiment"""
-        self._exp.stop()
-        self._stop_controller()
+        try:
+            self._exp.stop()
+
+        except Exception:
+            pass
+
+        finally:
+            # Terminate all worker processes
+            logger.info("Terminate all worker processes")
+            for proc in self._worker_procs:
+                proc.terminate()
+                time.sleep(1)
+
+            self._stop_controller()
 
     def push_flow(self, flow_md):
         """Put a new flow via HTTP put to frontend
@@ -214,24 +235,30 @@ class Emulator(object):
         node = self._exp.get_node(host_id)
         node.cmd("killall {}".format(cmd))
 
-    def _run_monitor(self, cycle=3):
+    def _monitor_processor(self, cycle=3):
         """Run monitoring for flows and processors"""
-        signal.signal(signal.SIGINT, self._signal_exit)
-        logger.info("Enter monitoring loop...")
         while True:
             for host_id in self._topo.hosts():
                 self.push_processor(host_id)
             time.sleep(3)
 
-        logger.info("Exit monitoring loop")
-
     def run_monitor(self, cycle=3):
-        pass
+        """Run monitoring in another process"""
+        logger.info("Start monitoring processors")
+        self._mon_proc_proc.start()
 
     def cli(self):
         """CLI"""
         while True:
             time.sleep(3)
+
+    def wait(self, sleep=3):
+        logger.info("Enter waiting loop...")
+        try:
+            while True:
+                time.sleep(sleep)
+        except KeyboardInterrupt:
+            return
 
     # --- Simple Experiments ---
 

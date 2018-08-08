@@ -15,9 +15,13 @@ from haecemu import util
 LOG_ROOT = path.join(path.expanduser("~"), ".haecemu", "log")
 
 # Log config for dependencies
-logging.getLogger("requests").setLevel(logging.WARNING)
+
+requests_log = logging.getLogger("requests")
+requests_log.addHandler(logging.NullHandler())
+requests_log.propagate = False
 
 logger = logging.getLogger('haec-emulator')
+logger.propagate = False
 
 
 LEVELS = {
@@ -46,7 +50,7 @@ FORMAT = {
 def conf_logger(level, handler=None, formatter=None):
     """Config HAEC emulator root logger"""
     logger.setLevel(LEVELS[level])
-    if not handler:
+    if not handler or handler == "console":
         handler = logging.StreamHandler()
     elif handler == "rotatingfile":
         log_file_path = path.join(LOG_ROOT, "haecemu.log")
