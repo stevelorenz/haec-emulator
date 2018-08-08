@@ -29,7 +29,7 @@ if [[ $1 = "-cn" ]]; then
     git clone https://github.com/containernet/containernet
     cd containernet/ansible
     sudo ansible-playbook install.yml
-else
+elif [[ $1 = "-mn" ]]; then
     echo "Installing Mininet"
     cd ~
     sudo rm -rf openflow &> /dev/null
@@ -52,20 +52,25 @@ else
     then
         ./install.sh
     fi
+else
+    echo "Skip installing Mininet or Containernet"
 fi
 
 
 # Metis
-cd ~
-wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
-tar -xzf metis-5.1.0.tar.gz
-rm metis-5.1.0.tar.gz
-cd metis-5.1.0
-make config
-make
-sudo make install
-cd ~
-rm -rf metis-5.1.0
+if [[ $2 = "-mt" ]]; then
+    echo "Installing Metis"
+    cd ~
+    wget http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+    tar -xzf metis-5.1.0.tar.gz
+    rm metis-5.1.0.tar.gz
+    cd metis-5.1.0
+    make config
+    make
+    sudo make install
+    cd ~
+    rm -rf metis-5.1.0
+fi
 
 # Pyro4
 sudo apt-get install -y python-pip

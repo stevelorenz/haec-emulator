@@ -9,14 +9,13 @@ from haecemu.emulator import Emulator
 from haecemu.topolib import SimpleFatTree
 
 # Use httpbin just for test HTTP requests
-emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
+emu = Emulator(mode="emu", remote_base_url="http://httpbin.org")
 emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = SimpleFatTree(hosts=2, host_type="process")
-    # Use docker instead of process
-    # topo = SimpleFatTree(hosts=2, host_type="docker")
+    # Use docker for each host, alternative: host_type="process"
+    topo = SimpleFatTree(hosts=2, host_type="docker")
     exp = emu.setup(topo)
     print("All hosts: %s".format(",".join(topo.hosts())))
     emu.ping_all()
