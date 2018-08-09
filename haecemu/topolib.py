@@ -13,15 +13,15 @@ from random import randint
 from haecemu import log
 from mininet.topo import Topo
 
+logger = log.logger
+
 try:
     from MaxiNet.Frontend.container import Docker
 except ImportError:
-    pass
-
-logger = log.logger
-
+    logger.info("[WARN] Can not import docker container for MaxiNet")
 
 #  TODO:  <26-07-18, Zuo> Improve these methods #
+
 
 def rand_byte(max=255):
     return hex(randint(0, max))[2:]
@@ -36,6 +36,11 @@ def make_dpid(idx):
     a = make_mac(idx)
     dp = "".join(re.findall(r'[a-f0-9]+', a))
     return "0" * (16 - len(dp)) + dp
+
+
+def make_dpid_seq(idx):
+    dp = "".join(("0" * (16 - len(str(idx))), str(idx)))
+    return dp
 
 
 class BaseTopo(Topo):
@@ -60,11 +65,30 @@ class BaseTopo(Topo):
         super(BaseTopo, self).__init__(*args, **kwargs)
 
 
+class SingleParentTree(BaseTopo):
+    """SingleParentTree
+
+    Mainly used for checking the connectivity of active MaxiNet workers
+    """
+
+    ctl_prog = "ryu_l2_switch.py"
+
+    def __init__(self, hosts, bw=10, lat=0.1, *args, **kwargs):
+        self._hosts = hosts
+        self._bw = bw
+        self._lat = lat
+        super(SingleParentTree, self).__init__(*args, **kwargs)
+        logger.info("[TOPO] SingleParentTree is built")
+
+    def build(self):
+        pass
+
+
 class SimpleFatTree(BaseTopo):
 
     ctl_prog = "ryu_l2_switch.py"
 
-    def __init__(self, hosts, bwlimit=10, lat=0.1, * args, **kwargs):
+    def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
         """Simple fat tree topo with same link latency and bandwidth"""
         self._hosts = hosts
         self._bwlimit = bwlimit
@@ -82,7 +106,7 @@ class SimpleFatTree(BaseTopo):
                 ip="10.0.0." + str(i + 1),
                 **self._host_kargs
             )
-            sw = self.addSwitch('s' + str(s), dpid=make_dpid(s),
+            sw = self.addSwitch('s' + str(s), dpid=make_dpid_seq(s),
                                 **dict(listenPort=(13000 + s - 1)))
             s = s + 1
             self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
@@ -91,7 +115,7 @@ class SimpleFatTree(BaseTopo):
         while len(toDo) > 1:
             newToDo = []
             for i in range(0, len(toDo), 2):
-                sw = self.addSwitch('s' + str(s), dpid=make_dpid(s),
+                sw = self.addSwitch('s' + str(s), dpid=make_dpid_seq(s),
                                     **dict(listenPort=(13000 + s - 1)))
                 s = s + 1
                 newToDo.append(sw)

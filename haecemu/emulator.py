@@ -9,6 +9,7 @@ About: HAEC emulator
 
 import json
 import multiprocessing
+import re
 import shlex
 import subprocess
 import time
@@ -27,6 +28,8 @@ CONFIG_ROOT = path.join(path.expanduser("~"), ".haecemu")
 CTL_PROG_PATH = path.join(path.expanduser("~"), ".haecemu", "controller")
 
 POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
+
+EMU_MODES = ("emu", "test")
 
 
 class Emulator(object):
@@ -49,6 +52,9 @@ class Emulator(object):
         """
         self._load_config()
         self._remote_base_url = remote_base_url
+        if mode not in EMU_MODES:
+            logger.error("Invalid emulator mode.")
+            self.cleanup()
         self._mode = mode
         self._host_type = "container"
 
@@ -114,6 +120,13 @@ class Emulator(object):
                 urljoin(self._ofctl_url, '/stats/flow/{}'.format(dp)))
         return flows
 
+    def _ctl_get_req(self, url):
+        return requests.get(urljoin(self._ofctl_url, url)).json()
+
+    def _get_con_dps(self):
+        con_dps = self._ctl_get_req("/stats/switches")
+        return con_dps
+
     # --- Cooperate with other components ---
 
     # MARK: TBD if check the data validation for each meta-data dict
@@ -153,7 +166,31 @@ class Emulator(object):
             temp = int(float(temp) / 1000.0)
         return temp
 
-    # --- Topo Mapping --
+    def _check_dps_conn(self, num_trys=3, wait=10):
+        """Check connection of all datapaths (switches) in the topology"""
+
+        topo_sws = self._topo.switches()  # str
+        topo_dps = map(int, [re.sub("[^0-9]", "", dp) for dp in topo_sws])
+
+        # a list of int
+        t = 0
+        while t < num_trys:
+            con_dps = self._get_con_dps()
+            un_con_dps = list(set(topo_dps) - set(con_dps))
+            # All are connected
+            if not un_con_dps:
+                break
+            t += 1
+            time.sleep(wait)
+        # Too much trys
+        else:
+            logger.error("""Datapath {} are not connected to the
+                            controller""".format(", ".join(map(str, un_con_dps))))
+            self.cleanup()
+
+        logger.info("All datapaths are connected to the controller")
+
+    # --- Public API ---
 
     def map_topo(self, mode="1on1"):
         """Map topology on workers
@@ -161,8 +198,6 @@ class Emulator(object):
         :param mode:
         """
         pass
-
-    # --- Public API ---
 
     def setup(self, topo, switch=OVSSwitch):
         """Setup an emulation experiment
@@ -178,26 +213,28 @@ class Emulator(object):
             self._exp.setup()
         except Exception as e:
             logger.error(e)
-            self._stop_controller()
-            raise e
+            self.cleanup()
+
+        self._check_dps_conn()
+
         return self._exp
 
     def cleanup(self):
         """Cleanup an emulation experiment"""
         try:
-            self._exp.stop()
+            if self._exp:
+                self._exp.stop()
+            self._stop_controller()
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.info(e)
 
         finally:
             # Terminate all worker processes
-            logger.info("Terminate all worker processes")
-            for proc in self._worker_procs:
+            logger.info("Terminate all active children processes.")
+            for proc in multiprocessing.active_children():
                 proc.terminate()
                 time.sleep(1)
-
-            self._stop_controller()
 
     def push_flow(self, flow_md):
         """Put a new flow via HTTP put to frontend

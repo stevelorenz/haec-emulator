@@ -1,7 +1,4 @@
 #!/usr/bin/env python2
-"""
-About: Tests for Cube topology
-"""
 
 import time
 

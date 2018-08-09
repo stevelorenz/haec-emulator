@@ -1,7 +1,4 @@
 #!/usr/bin/env python2
-"""
-About: Simple ping with FatTree topology
-"""
 
 import time
 
