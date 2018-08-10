@@ -4,12 +4,13 @@
 #
 
 HAECEMU = haecemu/*.py
+CONTROLLER_APPS = controller/*.py
 TEST = haecemu/test/*.py
 EXAMPLES = ./examples/*.py
 SH_SCRIPTS = ./script/*.sh
 PYTHON ?= python
 
-PYSRC = $(HAECEMU)
+PYSRC = $(HAECEMU) $(CONTROLLER_APPS)
 PYCFILE = $(shell find ./ -name '*.pyc')
 TMP_FILE = $(PYCFILE) build dist *.egg-info
 

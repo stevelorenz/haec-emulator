@@ -18,7 +18,6 @@ An OpenFlow 1.0 L2 learning switch implementation.
 """
 
 
-from ryu.app.wsgi import ControllerBase, Response, WSGIApplication, route
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, set_ev_cls

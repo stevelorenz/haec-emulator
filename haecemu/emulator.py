@@ -9,7 +9,6 @@ About: HAEC emulator
 
 import json
 import multiprocessing
-import re
 import shlex
 import subprocess
 import time
@@ -27,9 +26,13 @@ logger = log.logger
 CONFIG_ROOT = path.join(path.expanduser("~"), ".haecemu")
 CTL_PROG_PATH = path.join(path.expanduser("~"), ".haecemu", "controller")
 
+DEFAULT_CTL_PROG = "ryu_l2_switch.py"
+
 POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
 
 EMU_MODES = ("emu", "test")
+DATAPATH_NAME_PREFIX = "s"
+HOST_NAME_PREFIX = "h"
 
 
 class Emulator(object):
@@ -44,8 +47,7 @@ class Emulator(object):
 
     _ofctl_url = "http://localhost:8080"
 
-    def __init__(self, mode="emu", remote_base_url="",
-                 host_type="container"):
+    def __init__(self, mode="emu", remote_base_url=""):
         """Init HAEC emulator
 
         :param remote_base_url: Base URL of the remote frontend
@@ -56,9 +58,10 @@ class Emulator(object):
             logger.error("Invalid emulator mode.")
             self.cleanup()
         self._mode = mode
-        self._host_type = "container"
 
+        self._host_type = None
         self._ctl_prog = None
+        self._cluster = None
         self._exp = None
         self._topo = None
 
@@ -68,7 +71,6 @@ class Emulator(object):
                       ])
         ))
 
-        # Multiproc for tasks
         self._worker_procs = []
         self._mon_proc_proc = multiprocessing.Process(name="processor monitor",
                                                       target=self._monitor_processor)
@@ -81,20 +83,17 @@ class Emulator(object):
                         handler=configs['log']['handler']
                         )
 
-    # @staticmethod
-    # def _signal_exit(signal, frame):
-        # logger.info("Emulator exits.")
-        # sys.exit(0)
-
-    # --- SDN Controller ---
-
     def _run_controller(self, topo):
         """Run controller in background
 
         Commuinicate with Controller through REST API
         """
-        if not hasattr(topo, 'ctl_prog'):
-            topo.ctl_prog = 'ryu_l2_switch.py'
+        if not hasattr(topo, "ctl_prog"):
+            logger.info(
+                "Can not find bound controller program. Use default: {}".format(
+                    DEFAULT_CTL_PROG)
+            )
+            topo.ctl_prog = DEFAULT_CTL_PROG
         self._ctl_prog = path.join(CTL_PROG_PATH, topo.ctl_prog)
         logger.debug('Current controller program: {}'.format(self._ctl_prog))
         subprocess.check_call(
@@ -126,8 +125,6 @@ class Emulator(object):
     def _get_con_dps(self):
         con_dps = self._ctl_get_req("/stats/switches")
         return con_dps
-
-    # --- Cooperate with other components ---
 
     # MARK: TBD if check the data validation for each meta-data dict
 
@@ -170,7 +167,8 @@ class Emulator(object):
         """Check connection of all datapaths (switches) in the topology"""
 
         topo_sws = self._topo.switches()  # str
-        topo_dps = map(int, [re.sub("[^0-9]", "", dp) for dp in topo_sws])
+        topo_dps = map(int, [dp.replace(DATAPATH_NAME_PREFIX, "")
+                             for dp in topo_sws])
 
         # a list of int
         t = 0
@@ -181,6 +179,7 @@ class Emulator(object):
             if not un_con_dps:
                 break
             t += 1
+            self._restart_dps(un_con_dps)
             time.sleep(wait)
         # Too much trys
         else:
@@ -189,6 +188,16 @@ class Emulator(object):
             self.cleanup()
 
         logger.info("All datapaths are connected to the controller")
+
+    def _restart_dps(self, dps):
+        """Restart un-connected datapaths"""
+        for dp in dps:
+            wk = self._exp.get_worker(DATAPATH_NAME_PREFIX + dp)
+            # MARK: Restart the OVS service to let the Datapath to send hello
+            # event again. Events logs can be found ~/.haecemu/log/ryu.log. (Log
+            # level should be set to DEBUG in the ryu_log.ini)
+            wk.run_cmd("sudo systemctl restart openvswitch-switch.service")
+            logger.info("Restart OVS service on worker {}".format(wk.ip()))
 
     # --- Public API ---
 
@@ -206,10 +215,11 @@ class Emulator(object):
         :param switch:
         """
         self._topo = topo
+        self._host_type = topo.host_type
         self._run_controller(topo)
-        cluster = maxinet.Cluster()
+        self._cluster = maxinet.Cluster()
         try:
-            self._exp = maxinet.Experiment(cluster, topo, switch=switch)
+            self._exp = maxinet.Experiment(self._cluster, topo, switch=switch)
             self._exp.setup()
         except Exception as e:
             logger.error(e)
@@ -297,7 +307,18 @@ class Emulator(object):
         except KeyboardInterrupt:
             return
 
-    # --- Simple Experiments ---
+    def print_docker_status(self):
+        """Print docker status of all workers"""
+        if self._host_type != "docker":
+            logger.info("The host type is not docker")
+            return
+        print("------ Docker status of all active workers ------")
+        for wk in self._cluster.workers():
+            print("Worker IP: {}".format(wk.ip()))
+            ret = wk.run_cmd("sudo docker container ls")
+            print(ret)
+            print("=======")
+        print("-------------------------------------------------")
 
     def ping_all(self):
         sent = 0.0
@@ -309,10 +330,9 @@ class Emulator(object):
                 print("{} -> {}".format(host.name, target.name))
                 sent += 1.0
                 if(host.pexec("ping -c 3 " + target.IP())[2] != 0):
-                    print(" X")
+                    pass
                 else:
                     received += 1.0
-                    print()
         print(
             "Ping All Results: {:.2f} dropped, ({}/{} received)".format(
                 (1.0 - received / sent) * 100.0, int(received), int(sent))
