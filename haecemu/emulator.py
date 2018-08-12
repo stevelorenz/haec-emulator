@@ -338,5 +338,8 @@ class Emulator(object):
                 (1.0 - received / sent) * 100.0, int(received), int(sent))
         )
 
+    def ping2hosts(self, h1, h2, count=3):
+        pass
+
     def random_iperf_udp(self):
         pass

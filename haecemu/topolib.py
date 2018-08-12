@@ -76,6 +76,13 @@ class BaseTopo(Topo):
 
         super(BaseTopo, self).__init__(*args, **kwargs)
 
+    def addLinkNamedIfce(self, src, dst, *args, **kwargs):
+        self.addLink(src, dst,
+                     intfName1="-".join((src, dst)),
+                     intfName2="-".join((dst, src)),
+                     * args, **kwargs
+                     )
+
 
 class SingleParentTree(BaseTopo):
     """SingleParentTree
@@ -143,21 +150,37 @@ class SimpleFatTree(BaseTopo):
 class HAECCube(BaseTopo):
     """HAEC cube topology: 3-dimensional hypercube
 
+    Each node of the cube contains one switch and a host that is directly
+    connected to the switch.
+
     Node index: s(x, y, z)
         x, y: Index in the same board
         z: The board index
+
+    - Intra board nodes are statically connected.
+    - Inter board nodes are dynamically connected by using MaxiNet experiment
+    class.
     """
 
-    ctl_prog = "ryu_cube_energy.py"
+    ctl_prog = "ryu_haeccube.py"
+
+    INTRA_BOARD_TOPOS = ("torus", "mesh")
 
     def __init__(self, board_len=3, board_num=3, *args, **kwargs):
         self._board_len = board_len
         self._board_num = board_num
 
-        self._intra_board_para = {
-            "bw", 10,
-            "delay", 0.1,
-            "loss", 0
+        self.intra_board_link_prop = {
+            "bw": 10,
+            "delay": 0.1,
+            "loss": 0
+        }
+
+        # MARK: DEPEND on the node distance
+        self.inter_board_link_prop = {
+            "bw": 3,
+            "delay": 0.5,
+            "loss": 5
         }
 
         super(HAECCube, self).__init__(*args, **kwargs)
@@ -165,12 +188,20 @@ class HAECCube(BaseTopo):
             "[TOPO] HAECCube with board length: {} and board num: {} is built.".format(board_len, board_num))
 
     def build(self):
-        self._build_one_board(0)
+        self._build_one_board(0)  # step by step
 
-    def _build_one_board(self, board_idx):
+    def _build_one_board(self, board_idx, topo="torus"):
+
+        if topo not in self.INTRA_BOARD_TOPOS:
+            logger.error("[HAECCube] Unknown topology to build a single board.")
+            raise RuntimeError
+        logger.info(
+            "[HAECCube] Topology used for intra-board connection: {}".format(topo))
+
+        n = self._board_len
         node_idx = 1
-        for x in range(self._board_len):
-            for y in range(self._board_len):
+        for x in range(n):
+            for y in range(n):
                 hname, sname = [prefix + "{}{}{}".format(x, y, board_idx) for
                                 prefix in ("h", "s")]
                 self.addHost(hname,
@@ -180,5 +211,23 @@ class HAECCube(BaseTopo):
                                dpid="0"*(DPID_LEN - 3)+"{}{}{}".format(x, y, board_idx))
                 # Connect host and switch -> the port for host on the switch is
                 # always 1. Important for routing!
-                # self.addLink()
+                self.addLink(sname, hname,
+                             intfName1=sname+"-"+hname,
+                             intfName2=hname+"-"+sname,
+                             bw=1000, delay=0, loss=0
+                             )
                 node_idx += 1
+
+        if topo == "torus":
+            for x in range(n):
+                for y in range(n):
+                    s = "s{}{}{}".format(x, y, board_idx)
+                    neighbours = (
+                        "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
+                        "s{}{}{}".format((x+1) % n, y, board_idx)  # down
+                    )
+                    for nb in neighbours:
+                        self.addLinkNamedIfce(
+                            s, nb, ** self.intra_board_link_prop)
+        elif topo == "mesh":
+            pass
