@@ -11,7 +11,6 @@ MARK:
         - bw: Mbps, delay: ms, loss: %, max_queue_size: n
 """
 
-import re
 from random import randint
 
 from haecemu import log
@@ -26,7 +25,20 @@ except ImportError:
 
 HOST_TYPES = ["process", "docker"]
 
-DPID_LEN = 16
+# DPID is a 64 bit number, lower 48 bits for mac address, top 16 bits for
+# implementer
+_DPID_LEN = 16
+_DPID_FMT = '%0{0}x'.format(_DPID_LEN)
+DPID_PATTERN = r'[0-9a-f]{%d}' % _DPID_LEN
+
+
+def dpid_to_str(dpid):
+    return _DPID_FMT % dpid
+
+
+def str_to_dpid(dpid_str):
+    assert len(dpid_str) == _DPID_LEN
+    return int(dpid_str, 16)
 
 
 def rand_byte(max=255):
@@ -36,17 +48,6 @@ def rand_byte(max=255):
 def make_mac(idx):
     return "00:" + rand_byte() + ":" + \
         rand_byte() + ":00:00:" + hex(idx)[2:]
-
-
-def make_dpid(idx):
-    a = make_mac(idx)
-    dp = "".join(re.findall(r'[a-f0-9]+', a))
-    return "0" * (DPID_LEN - len(dp)) + dp
-
-
-def make_dpid_seq(idx):
-    dp = "".join(("0" * (DPID_LEN - len(str(idx))), str(idx)))
-    return dp
 
 
 class BaseTopo(Topo):
@@ -74,7 +75,12 @@ class BaseTopo(Topo):
         else:
             logger.info("[TOPO] Use processes.")
 
+        self.dpid_table = {}  # map of switch name and DPIDs
+
         super(BaseTopo, self).__init__(*args, **kwargs)
+
+        logger.debug("[TOPO] DPID table:")
+        logger.debug(self.dpid_table)
 
     def addLinkNamedIfce(self, src, dst, *args, **kwargs):
         self.addLink(src, dst,
@@ -82,6 +88,11 @@ class BaseTopo(Topo):
                      intfName2="-".join((dst, src)),
                      * args, **kwargs
                      )
+
+    def _update_dpid_table(self, dpid, sname):
+        if dpid in self.dpid_table:
+            raise RuntimeError("Duplicated DPIDs")
+        self.dpid_table[dpid] = sname
 
 
 class SingleParentTree(BaseTopo):
@@ -99,12 +110,16 @@ class SingleParentTree(BaseTopo):
         super(SingleParentTree, self).__init__(*args, **kwargs)
         logger.info("[TOPO] SingleParentTree is built")
 
+    def _make_dpid(self, sname):
+        pass
+
     def build(self):
         pass
 
 
 class SimpleFatTree(BaseTopo):
 
+    # TODO: Use STP instead of learning switch
     ctl_prog = "ryu_l2_switch.py"
 
     def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
@@ -114,6 +129,13 @@ class SimpleFatTree(BaseTopo):
         self._lat = lat
         super(SimpleFatTree, self).__init__(*args, **kwargs)
         logger.info("[TOPO] SimpleFatTree is built.")
+
+    def _make_dpid(self, sname, idx):
+        if idx > 250 or idx < 0:
+            raise RuntimeError("Invalid switch index.")
+        dpid = "".join(("0" * (_DPID_LEN - len(str(idx))), str(idx)))
+        self._update_dpid_table(dpid, sname)
+        return dpid
 
     def build(self):
         tor = []
@@ -125,7 +147,7 @@ class SimpleFatTree(BaseTopo):
                 ip="10.0.0." + str(i + 1),
                 **self._host_kargs
             )
-            sw = self.addSwitch('s' + str(s), dpid=make_dpid_seq(s),
+            sw = self.addSwitch("s" + str(s), dpid=self._make_dpid("s"+str(s), s),
                                 **dict(listenPort=(13000 + s - 1)))
             s = s + 1
             self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
@@ -134,7 +156,8 @@ class SimpleFatTree(BaseTopo):
         while len(toDo) > 1:
             newToDo = []
             for i in range(0, len(toDo), 2):
-                sw = self.addSwitch('s' + str(s), dpid=make_dpid_seq(s),
+                sw = self.addSwitch("s" + str(s),
+                                    dpid=self._make_dpid("s"+str(s), s),
                                     **dict(listenPort=(13000 + s - 1)))
                 s = s + 1
                 newToDo.append(sw)
@@ -187,6 +210,14 @@ class HAECCube(BaseTopo):
         logger.info(
             "[TOPO] HAECCube with board length: {} and board num: {} is built.".format(board_len, board_num))
 
+    def _make_dpid(self, sname, x, y, board_idx):
+        dpid = "".join((
+            "0" * (_DPID_LEN - 4),
+            "1{}{}{}".format(x, y, board_idx)
+        ))
+        self._update_dpid_table(dpid, sname)
+        return dpid
+
     def build(self):
         self._build_one_board(0)  # step by step
 
@@ -204,30 +235,34 @@ class HAECCube(BaseTopo):
             for y in range(n):
                 hname, sname = [prefix + "{}{}{}".format(x, y, board_idx) for
                                 prefix in ("h", "s")]
+
                 self.addHost(hname,
                              ip="10.0.0.{}/24".format(node_idx),
-                             ** self._host_kargs)
+                             mac=make_mac(node_idx),
+                             **self._host_kargs)
+
                 self.addSwitch(sname,
-                               dpid="0"*(DPID_LEN - 3)+"{}{}{}".format(x, y, board_idx))
+                               # The DPID match the name of the switch
+                               dpid=self._make_dpid(sname, x, y, board_idx),
+                               ** dict(listenPort=(13000 + node_idx - 1))
+                               )
                 # Connect host and switch -> the port for host on the switch is
                 # always 1. Important for routing!
-                self.addLink(sname, hname,
-                             intfName1=sname+"-"+hname,
-                             intfName2=hname+"-"+sname,
-                             bw=1000, delay=0, loss=0
-                             )
+                # self.addLinkNamedIfce(
+                #     sname, hname, **self.intra_board_link_prop)
+
                 node_idx += 1
 
-        if topo == "torus":
-            for x in range(n):
-                for y in range(n):
-                    s = "s{}{}{}".format(x, y, board_idx)
-                    neighbours = (
-                        "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
-                        "s{}{}{}".format((x+1) % n, y, board_idx)  # down
-                    )
-                    for nb in neighbours:
-                        self.addLinkNamedIfce(
-                            s, nb, ** self.intra_board_link_prop)
-        elif topo == "mesh":
-            pass
+        # if topo == "torus":
+        #    for x in range(n):
+        #        for y in range(n):
+        #            s = "s{}{}{}".format(x, y, board_idx)
+        #            neighbours = (
+        #                "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
+        #                "s{}{}{}".format((x+1) % n, y, board_idx)  # down
+        #            )
+        #            for nb in neighbours:
+        #                self.addLinkNamedIfce(
+        #                    s, nb, ** self.intra_board_link_prop)
+        # elif topo == "mesh":
+        #    pass

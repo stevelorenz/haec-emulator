@@ -17,7 +17,7 @@ from urlparse import urljoin
 
 import requests
 
-from haecemu import log
+from haecemu import log, topolib
 from MaxiNet.Frontend import maxinet
 from mininet.node import OVSSwitch
 
@@ -31,8 +31,6 @@ DEFAULT_CTL_PROG = "ryu_l2_switch.py"
 POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
 
 EMU_MODES = ("emu", "test")
-DATAPATH_NAME_PREFIX = "s"
-HOST_NAME_PREFIX = "h"
 
 
 class Emulator(object):
@@ -166,14 +164,11 @@ class Emulator(object):
     def _check_dps_conn(self, num_trys=3, wait=10, restart=False):
         """Check connection of all datapaths (switches) in the topology"""
 
-        topo_sws = self._topo.switches()  # str
-        topo_dps = map(int, [dp.replace(DATAPATH_NAME_PREFIX, "")
-                             for dp in topo_sws])
+        topo_dps = self._topo.dpid_table.keys()
 
-        # a list of int
         t = 0
         while t < num_trys:
-            con_dps = self._get_con_dps()
+            con_dps = map(topolib.dpid_to_str, self._get_con_dps())
             un_con_dps = list(set(topo_dps) - set(con_dps))
             # All are connected
             if not un_con_dps:
@@ -196,7 +191,7 @@ class Emulator(object):
     def _restart_dps(self, dps):
         """Restart un-connected datapaths"""
         for dp in dps:
-            wk = self._exp.get_worker(DATAPATH_NAME_PREFIX + dp)
+            wk = self._exp.get_worker(self._topo.dpid_table[dp])
             # MARK: Restart the OVS service to let the Datapath to send hello
             # event again. Events logs can be found ~/.haecemu/log/ryu.log. (Log
             # level should be set to DEBUG in the ryu_log.ini)
@@ -205,7 +200,9 @@ class Emulator(object):
 
     def _get_placement_mapping(self, placement):
         mapping = {}
-        for node in self._topo.nodes():
+        # Check if each host has a directly-connected switch
+        # https://github.com/MaxiNet/MaxiNet/wiki/Docker-Containers
+        for node in self._topo.switches():
             mapping[node] = 0
         logger.debug("[SETUP] Placement mapping: ")
         logger.debug(mapping)
