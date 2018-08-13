@@ -55,13 +55,13 @@ with open("./workers.txt", "r") as f:
         print("[WARN] No workers in the workers.txt")
         print("Run get_workers to get available worker info.")
 
-VM_WOKERS = ["vagrant@10.0.1.12:22"]
+VM_WORKERS = ["vagrant@10.0.1.12:22"]
 
-env.roledefs = {"workers": WORKERS, "vm_workers": VM_WOKERS}
+env.roledefs = {"workers": WORKERS, "vm_workers": VM_WORKERS}
 
 # set default role and hosts
 if not env.roles and not env.hosts:
-    env.roles = ['workers']
+    env.roles = ["workers"]
     env.hosts = WORKERS
 
 # set password directory
@@ -69,14 +69,14 @@ PASSWORD_DICT = {}
 for worker in WORKERS:
     PASSWORD_DICT[worker] = "odroid"
 
-for vm_worker in VM_WOKERS:
+for vm_worker in VM_WORKERS:
     PASSWORD_DICT[vm_worker] = "vagrant"
 
 env.passwords = PASSWORD_DICT
 
 
 @task
-@decorators.hosts(['odroid@localhost'])
+@decorators.hosts(["odroid@localhost"])
 def get_workers(network=""):
     """Scan workers in the network and output results in workers.txt"""
     scan_result = local(
@@ -125,8 +125,8 @@ def kill_frontend():
 
 @task
 def run_worker():
-    with settings(hide('warnings')):
-        count = int(run('pgrep -c MaxiNetWorker').splitlines()[0])
+    with settings(hide("warnings", "running")):
+        count = 0
         while count == 0:
             sudo('nohup MaxiNetWorker > /dev/null 2>&1 &', pty=False)
             sleep(1)
@@ -147,6 +147,7 @@ def kill_worker():
 def _get_hostname():
     hostname = run("cat /etc/hostname")
     return hostname
+
 
 @task
 @decorators.hosts("odroid@localhost")
@@ -196,7 +197,7 @@ share={share}
             "host_name": ret[host],
             "ip": host.split("@")[1][:-3],
             "share": "1"
-            })
+        })
         )
     workers = '\n'.join(worker_items)
     cfg = '\n'.join([template, workers])
@@ -286,6 +287,12 @@ done
     with settings(hide('warnings', 'running', 'stderr')):
         sudo(cmd)
         sudo("ovs-vsctl show")
+
+
+@task
+def cleanup_mn():
+    with settings(hide('warnings', 'running', 'stderr')):
+        sudo("mn -c")
 
 
 @task

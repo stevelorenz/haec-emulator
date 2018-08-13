@@ -36,6 +36,13 @@ cleanup:
 	@echo "# Cleanup tempory files"
 	rm -rf $(TMP_FILE)
 
+pip-freeze:
+	@echo "# Freeze pip packages"
+	pip freeze > ./dev_requirements.txt
+
+pip-uninstall-all:
+	@echo "# Uninstall all pip packages"
+	pip freeze | xargs pip uninstall -y
 
 # vim:ft=make
 #

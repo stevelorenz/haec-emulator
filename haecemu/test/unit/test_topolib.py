@@ -23,6 +23,7 @@ class testTopolib(unittest.TestCase):
         haec_cube = topolib.HAECCube(board_len, board_num)
         print(sorted(haec_cube.switches()))
         print(haec_cube.hosts())
+        print(sorted(haec_cube.nodes()))
         print(sorted(haec_cube.links()))
 
     def tearDown(self):

@@ -38,6 +38,10 @@ cd /home/vagrant/ryu
 pip install .
 SCRIPT
 
+$install_maxinet= <<-SCRIPT
+
+SCRIPT
+
 ####################
 #  Vagrant Config  #
 ####################

@@ -163,7 +163,7 @@ class Emulator(object):
             temp = int(float(temp) / 1000.0)
         return temp
 
-    def _check_dps_conn(self, num_trys=3, wait=10):
+    def _check_dps_conn(self, num_trys=3, wait=10, restart=False):
         """Check connection of all datapaths (switches) in the topology"""
 
         topo_sws = self._topo.switches()  # str
@@ -179,7 +179,11 @@ class Emulator(object):
             if not un_con_dps:
                 break
             t += 1
-            self._restart_dps(un_con_dps)
+            logger.debug("Current connected Datapath: {}".format(
+                ", ".join(map(str, con_dps))
+            ))
+            if restart:
+                self._restart_dps(un_con_dps)
             time.sleep(wait)
         # Too much trys
         else:
@@ -199,19 +203,23 @@ class Emulator(object):
             wk.run_cmd("sudo systemctl restart openvswitch-switch.service")
             logger.info("Restart OVS service on worker {}".format(wk.ip()))
 
+    def _get_placement_mapping(self, placement):
+        mapping = {}
+        for node in self._topo.nodes():
+            mapping[node] = 0
+        logger.debug("[SETUP] Placement mapping: ")
+        logger.debug(mapping)
+        return mapping
+
     # --- Public API ---
 
-    def map_topo(self, mode="1on1"):
-        """Map topology on workers
-
-        :param mode:
-        """
-        pass
-
-    def setup(self, topo, switch=OVSSwitch):
+    def setup(self, topo,
+              dp_wait=30, placement="all_in_one",
+              switch=OVSSwitch):
         """Setup an emulation experiment
 
-        :param topo:
+        :param placement: Placement algorithm
+        :param topo: To be emulated network topology
         :param switch:
         """
         self._topo = topo
@@ -219,13 +227,16 @@ class Emulator(object):
         self._run_controller(topo)
         self._cluster = maxinet.Cluster()
         try:
-            self._exp = maxinet.Experiment(self._cluster, topo, switch=switch)
+            self._exp = maxinet.Experiment(
+                self._cluster, topo, switch=switch,
+                nodemapping=self._get_placement_mapping(placement)
+            )
             self._exp.setup()
         except Exception as e:
             logger.error(e)
             self.cleanup()
 
-        self._check_dps_conn()
+        self._check_dps_conn(wait=dp_wait)
 
         return self._exp
 

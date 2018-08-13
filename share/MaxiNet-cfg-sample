@@ -1,4 +1,6 @@
 ; place this at ~/.MaxiNet.cfg
+; Sample config file used by Vagrant development env
+
 [all]
 password = HAEC_EMULATOR
 controller = 10.0.1.11:6633

@@ -15,20 +15,33 @@ About: Ryu application for HAEC Cube Topology
 Email: xianglinks@gmail.com
 """
 
+import json
+
+from ryu.app.wsgi import ControllerBase, Response, WSGIApplication, route
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import (CONFIG_DISPATCHER, MAIN_DISPATCHER,
                                     set_ev_cls)
+from ryu.lib import dpid as dpid_lib
 from ryu.lib.packet import ether_types, ethernet, packet
 from ryu.ofproto import ofproto_v1_3
 
+haec_cube_instance_name = 'haec_cube_api_app'
+url = '/haecube/mactable/{dpid}'
 
-class SimpleSwitch13(app_manager.RyuApp):
+
+class HAECCubeApp(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
+    _CONTEXTS = {'wsgi': WSGIApplication}
+
     def __init__(self, *args, **kwargs):
-        super(SimpleSwitch13, self).__init__(*args, **kwargs)
+        super(HAECCubeApp, self).__init__(*args, **kwargs)
         self.mac_to_port = {}
+
+        wsgi = kwargs['wsgi']
+        wsgi.register(HAECCubeController,
+                      {haec_cube_instance_name: self})
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -36,13 +49,6 @@ class SimpleSwitch13(app_manager.RyuApp):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        # install table-miss flow entry
-        #
-        # We specify NO BUFFER to max_len of the output action due to
-        # OVS bug. At this moment, if we specify a lesser number, e.g.,
-        # 128, OVS will send Packet-In with invalid buffer_id and
-        # truncated packet data. In that case, we cannot output packets
-        # correctly.  The bug has been fixed in OVS v2.1.0.
         match = parser.OFPMatch()
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
@@ -65,8 +71,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
-        # If you hit this you might want to increase
-        # the "miss_send_length" of your switch
+
         if ev.msg.msg_len < ev.msg.total_len:
             self.logger.debug("packet truncated: only %s of %s bytes",
                               ev.msg.msg_len, ev.msg.total_len)
@@ -82,13 +87,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         if eth.ethertype == ether_types.ETH_TYPE_LLDP:
             # ignore lldp packet
             return
+
         dst = eth.dst
         src = eth.src
 
         dpid = datapath.id
         self.mac_to_port.setdefault(dpid, {})
 
-        self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
+        self.logger.info("Packet in %s %s %s %s", dpid, src, dst, in_port)
 
         # learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src] = in_port
@@ -119,6 +125,50 @@ class SimpleSwitch13(app_manager.RyuApp):
         datapath.send_msg(out)
 
 
+class HAECCubeController(ControllerBase):
+
+    def __init__(self, req, link, data, **config):
+        super(HAECCubeController, self).__init__(req, link, data, **config)
+        self.haec_cube_app = data[haec_cube_instance_name]
+
+    @route('haeccube', url, methods=['GET'],
+           requirements={'dpid': dpid_lib.DPID_PATTERN})
+    def list_mac_table(self, req, **kwargs):
+
+        simple_switch = self.haec_cube_app
+        dpid = dpid_lib.str_to_dpid(kwargs['dpid'])
+
+        if dpid not in simple_switch.mac_to_port:
+            return Response(status=404)
+
+        mac_table = simple_switch.mac_to_port.get(dpid, {})
+        body = json.dumps(mac_table)
+        return Response(content_type='application/json', body=body)
+
+    @route('haeccube', url, methods=['PUT'],
+           requirements={'dpid': dpid_lib.DPID_PATTERN})
+    def put_mac_table(self, req, **kwargs):
+
+        simple_switch = self.haec_cube_app
+        dpid = dpid_lib.str_to_dpid(kwargs['dpid'])
+        try:
+            new_entry = req.json if req.body else {}
+        except ValueError:
+            raise Response(status=400)
+
+        if dpid not in simple_switch.mac_to_port:
+            return Response(status=404)
+
+        try:
+            mac_table = simple_switch.set_mac_to_port(dpid, new_entry)
+            body = json.dumps(mac_table)
+            return Response(content_type='application/json', body=body)
+        except Exception as e:
+            self.logger.error(e)
+            return Response(status=500)
+
+
+# General REST APIs, used for dev
 app_manager.require_app('ryu.app.rest_topology')
 app_manager.require_app('ryu.app.ws_topology')
 app_manager.require_app('ryu.app.ofctl_rest')
