@@ -13,7 +13,7 @@ MARK:
 
 from random import randint
 
-from haecemu import log
+from haecemu import log, util
 from mininet.topo import Topo
 
 logger = log.logger
@@ -221,6 +221,7 @@ class HAECCube(BaseTopo):
     def build(self):
         self._build_one_board(0)  # step by step
 
+    @util.print_time_func(logger.debug)
     def _build_one_board(self, board_idx, topo="torus"):
 
         if topo not in self.INTRA_BOARD_TOPOS:
@@ -235,12 +236,10 @@ class HAECCube(BaseTopo):
             for y in range(n):
                 hname, sname = [prefix + "{}{}{}".format(x, y, board_idx) for
                                 prefix in ("h", "s")]
-
                 self.addHost(hname,
                              ip="10.0.0.{}/24".format(node_idx),
                              mac=make_mac(node_idx),
                              **self._host_kargs)
-
                 self.addSwitch(sname,
                                # The DPID match the name of the switch
                                dpid=self._make_dpid(sname, x, y, board_idx),
@@ -248,21 +247,25 @@ class HAECCube(BaseTopo):
                                )
                 # Connect host and switch -> the port for host on the switch is
                 # always 1. Important for routing!
-                # self.addLinkNamedIfce(
-                #     sname, hname, **self.intra_board_link_prop)
+                self.addLinkNamedIfce(
+                    sname, hname, **self.intra_board_link_prop)
 
                 node_idx += 1
 
-        # if topo == "torus":
-        #    for x in range(n):
-        #        for y in range(n):
-        #            s = "s{}{}{}".format(x, y, board_idx)
-        #            neighbours = (
-        #                "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
-        #                "s{}{}{}".format((x+1) % n, y, board_idx)  # down
-        #            )
-        #            for nb in neighbours:
-        #                self.addLinkNamedIfce(
-        #                    s, nb, ** self.intra_board_link_prop)
-        # elif topo == "mesh":
-        #    pass
+        for x in range(n):
+            for y in range(n):
+                pass
+
+        if topo == "torus":
+            for x in range(n):
+                for y in range(n):
+                    s = "s{}{}{}".format(x, y, board_idx)
+                    neighbours = (
+                        "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
+                        "s{}{}{}".format((x+1) % n, y, board_idx)  # down
+                    )
+                    for nb in neighbours:
+                        self.addLinkNamedIfce(
+                            s, nb, ** self.intra_board_link_prop)
+        elif topo == "mesh":
+            pass

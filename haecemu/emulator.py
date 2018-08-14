@@ -208,6 +208,29 @@ class Emulator(object):
         logger.debug(mapping)
         return mapping
 
+    def _pre_exp_setup(self):
+
+        logger.info(
+            "[PRE_EXP_SETUP] Run mininet cleanup on frontend and all workers")
+
+        subprocess.check_call(shlex.split("sudo mn -c"))
+        for wk in self._cluster.worker:
+            wk.run_cmd("sudo mn -c")
+
+    def _post_cleanup(self):
+        self._cluster.remove_all_tunnels()
+        logger.info(
+            "[POST_CLEANUP] Remove all veth pairs")
+        for wk in self._cluster.worker:
+            veth_entrys = wk.run_cmd(
+                "sudo ip -o link show type veth").splitlines()
+            peers = list()
+            for entry in veth_entrys:
+                veth, peer = entry.split(":")[1].split("@")
+                peers.append(peer)
+                if veth not in peers:
+                    wk.run_cmd("sudo ip link delete {}".format(veth))
+
     # --- Public API ---
 
     def setup(self, topo,
@@ -228,6 +251,7 @@ class Emulator(object):
                 self._cluster, topo, switch=switch,
                 nodemapping=self._get_placement_mapping(placement)
             )
+            self._pre_exp_setup()
             self._exp.setup()
         except Exception as e:
             logger.error(e)
@@ -243,6 +267,7 @@ class Emulator(object):
             if self._exp:
                 self._exp.stop()
             self._stop_controller()
+            self._post_cleanup()
 
         except Exception as e:
             logger.info(e)
