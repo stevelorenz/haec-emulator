@@ -106,23 +106,7 @@ def get_links():
             print(line)
 
 
-def _install_pkgs(pkgs):
-    for pkg in pkgs:
-        sudo("apt-get install -y {}".format(pkg))
-
-
-@task
-def run_frontend():
-    local("MaxiNetFrontendServer > /dev/null 2>&1 &")
-    sleep(3)
-    local("MaxiNetStatus")
-
-
-@task
-def kill_frontend():
-    local("sudo killall MaxiNetFrontendServer")
-
-
+# Use systemd daemon instead
 @task
 def run_worker():
     with settings(hide("warnings", "running")):
@@ -304,3 +288,8 @@ def check_mxn_status():
 
         print("# Check running containers")
         print(sudo("docker container ls"))
+
+
+@task
+def cleanup_emulator():
+    pass

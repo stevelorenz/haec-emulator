@@ -19,12 +19,21 @@ class testTopolib(unittest.TestCase):
         sft = topolib.SimpleFatTree(hosts=2)
         self.assertEqual(sft.hosts(), ['h1', 'h2'])
 
-    def test_haeccube_fix(self, board_len=3, board_num=3):
-        haec_cube = topolib.HAECCube(board_len, board_num)
-        print(sorted(haec_cube.switches()))
-        print(haec_cube.hosts())
-        print(sorted(haec_cube.nodes()))
-        print(sorted(haec_cube.links()))
+    def test_haeccube_fix(self):
+        for board_len, board_num in (
+                (2, 2),
+                (3, 3),
+        ):
+            haec_cube = topolib.HAECCube(board_len, board_num)
+            print(sorted(haec_cube.nodes()))
+            print(sorted(haec_cube.links()))
+
+            # Check if there are duplicated links
+            valid_links = list()
+            for link in haec_cube.links():
+                if tuple(reversed(link)) in sorted(haec_cube.links()):
+                    raise RuntimeError(
+                        "Link {} is a duplicated link".format(link))
 
     def tearDown(self):
         pass

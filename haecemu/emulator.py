@@ -219,8 +219,10 @@ class Emulator(object):
 
     def _post_cleanup(self):
         self._cluster.remove_all_tunnels()
+
         logger.info(
-            "[POST_CLEANUP] Remove all veth pairs")
+            "[POST_CLEANUP] Remove all veth pairs and gre tunnels"
+        )
         for wk in self._cluster.worker:
             veth_entrys = wk.run_cmd(
                 "sudo ip -o link show type veth").splitlines()
@@ -231,7 +233,17 @@ class Emulator(object):
                 if veth not in peers:
                     wk.run_cmd("sudo ip link delete {}".format(veth))
 
-    # --- Public API ---
+            peers = list()
+            gre_entrys = wk.run_cmd(
+                "sudo ip -o link show type gre").splitlines()
+            for entry in gre_entrys:
+                gre, peer = entry.split(":")[1].split("@")
+                peers.append(peer)
+                if gre not in peers:
+                    wk.run_cmd("sudo ip link delete {}".format(gre))
+                    wk.run_cmd("sudo ip link delete {}tap".format(gre))
+
+            # --- Public API ---
 
     def setup(self, topo,
               dp_wait=30, placement="all_in_one",
@@ -360,16 +372,23 @@ class Emulator(object):
             for target in self._exp.hosts:
                 if(target == host):
                     continue
-                print("{} -> {}".format(host.name, target.name))
+                logger.info("{} -> {}".format(host.name, target.name))
                 sent += 1.0
                 if(host.pexec("ping -c 3 " + target.IP())[2] != 0):
-                    pass
+                    logger.info("{} can not ping {}".format(
+                        host.name, target.name))
                 else:
                     received += 1.0
-        print(
+        logger.info(
             "Ping All Results: {:.2f} dropped, ({}/{} received)".format(
                 (1.0 - received / sent) * 100.0, int(received), int(sent))
         )
+
+    def print_host_ips(self):
+        for h in self._exp.hosts:
+            ret = h.cmd("ip -o addr show")
+            print("Host: {}".format(h.name))
+            print(ret)
 
     def ping2hosts(self, h1, h2, count=3):
         pass

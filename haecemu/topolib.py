@@ -218,9 +218,6 @@ class HAECCube(BaseTopo):
         self._update_dpid_table(dpid, sname)
         return dpid
 
-    def build(self):
-        self._build_one_board(0)  # step by step
-
     @util.print_time_func(logger.debug)
     def _build_one_board(self, board_idx, topo="torus"):
 
@@ -234,15 +231,17 @@ class HAECCube(BaseTopo):
         node_idx = 1
         for x in range(n):
             for y in range(n):
-                hname, sname = [prefix + "{}{}{}".format(x, y, board_idx) for
+                hname, sname = [prefix + "{}{}{}".format(x+1, y+1, board_idx+1) for
                                 prefix in ("h", "s")]
                 self.addHost(hname,
-                             ip="10.0.0.{}/24".format(node_idx),
+                             ip="10.{}.{}.{}/24".format(x+1,
+                                                        y+1, board_idx + 1),
                              mac=make_mac(node_idx),
                              **self._host_kargs)
                 self.addSwitch(sname,
                                # The DPID match the name of the switch
-                               dpid=self._make_dpid(sname, x, y, board_idx),
+                               dpid=self._make_dpid(
+                                   sname, x+1, y+1, board_idx+1),
                                ** dict(listenPort=(13000 + node_idx - 1))
                                )
                 # Connect host and switch -> the port for host on the switch is
@@ -252,20 +251,21 @@ class HAECCube(BaseTopo):
 
                 node_idx += 1
 
-        for x in range(n):
-            for y in range(n):
-                pass
-
         if topo == "torus":
             for x in range(n):
                 for y in range(n):
-                    s = "s{}{}{}".format(x, y, board_idx)
+                    s = "s{}{}{}".format(x+1, y+1, board_idx+1)
                     neighbours = (
-                        "s{}{}{}".format(x, (y+1) % n, board_idx),  # right
-                        "s{}{}{}".format((x+1) % n, y, board_idx)  # down
+                        "s{}{}{}".format(x+1, (y+1) % n + 1, board_idx+1),
+                        "s{}{}{}".format((x+1) % n + 1, y+1, board_idx+1)
                     )
                     for nb in neighbours:
-                        self.addLinkNamedIfce(
-                            s, nb, ** self.intra_board_link_prop)
+                        # Check if is a duplicated link
+                        if (nb, s) not in self.links():
+                            self.addLinkNamedIfce(
+                                s, nb, ** self.intra_board_link_prop)
         elif topo == "mesh":
             pass
+
+    def build(self):
+        self._build_one_board(0)  # step by step

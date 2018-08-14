@@ -11,13 +11,13 @@ emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = HAECCube(host_type="docker", board_len=3)
+    topo = HAECCube(host_type="docker", board_len=2)
     exp = emu.setup(topo)
-    print("All hosts: %s".format(",".join(topo.hosts())))
-    # emu.ping_all()
+    emu.ping_all()
     time.sleep(3)
     # emu.run_monitor()
     emu.print_docker_status()
+    emu.print_host_ips()
 
     emu.wait()
 
