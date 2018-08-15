@@ -245,7 +245,7 @@ class Emulator(object):
 
             # --- Public API ---
 
-    def setup(self, topo,
+    def setup(self, topo, run_ctl=True,
               dp_wait=30, placement="all_in_one",
               switch=OVSSwitch):
         """Setup an emulation experiment
@@ -256,7 +256,9 @@ class Emulator(object):
         """
         self._topo = topo
         self._host_type = topo.host_type
-        self._run_controller(topo)
+        self._run_ctl = run_ctl
+        if self._run_ctl:
+            self._run_controller(topo)
         self._cluster = maxinet.Cluster()
         try:
             self._exp = maxinet.Experiment(
@@ -278,7 +280,8 @@ class Emulator(object):
         try:
             if self._exp:
                 self._exp.stop()
-            self._stop_controller()
+            if self._run_ctl:
+                self._stop_controller()
             self._post_cleanup()
 
         except Exception as e:
@@ -339,11 +342,6 @@ class Emulator(object):
         logger.info("Start monitoring processors")
         self._mon_proc_proc.start()
 
-    def cli(self):
-        """CLI"""
-        while True:
-            time.sleep(3)
-
     def wait(self, sleep=3):
         logger.info("Enter waiting loop...")
         try:
@@ -395,3 +393,7 @@ class Emulator(object):
 
     def random_iperf_udp(self):
         pass
+
+    def cli(self):
+        """CLI"""
+        self._exp.CLI(locals(), globals())

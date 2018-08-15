@@ -234,8 +234,8 @@ class HAECCube(BaseTopo):
                 hname, sname = [prefix + "{}{}{}".format(x+1, y+1, board_idx+1) for
                                 prefix in ("h", "s")]
                 self.addHost(hname,
-                             ip="10.{}.{}.{}/24".format(x+1,
-                                                        y+1, board_idx + 1),
+                             ip="10.{}.{}.{}/8".format(x+1,
+                                                       y+1, board_idx + 1),
                              mac=make_mac(node_idx),
                              **self._host_kargs)
                 self.addSwitch(sname,
@@ -260,7 +260,7 @@ class HAECCube(BaseTopo):
                         "s{}{}{}".format((x+1) % n + 1, y+1, board_idx+1)
                     )
                     for nb in neighbours:
-                        # Check if is a duplicated link
+                            # Check if is a duplicated link
                         if (nb, s) not in self.links():
                             self.addLinkNamedIfce(
                                 s, nb, ** self.intra_board_link_prop)
