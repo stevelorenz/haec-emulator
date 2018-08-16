@@ -94,6 +94,12 @@ class BaseTopo(Topo):
             raise RuntimeError("Duplicated DPIDs")
         self.dpid_table[dpid] = sname
 
+    def dumps(self):
+        """Dump topology with JSON format"""
+        # nodes
+        # edges
+        pass
+
 
 class SingleParentTree(BaseTopo):
     """SingleParentTree
@@ -185,13 +191,17 @@ class HAECCube(BaseTopo):
     class.
     """
 
-    ctl_prog = "ryu_haeccube.py"
+    # ctl_prog = "ryu_haeccube.py"
+    ctl_prog = "ryu_haeccube_dijkstra.py"
 
-    INTRA_BOARD_TOPOS = ("torus", "mesh")
+    INTRA_BOARD_TOPOS = ("dummy", "torus", "mesh")
 
-    def __init__(self, board_len=3, board_num=3, *args, **kwargs):
+    def __init__(self, board_len=3, board_num=3,
+                 intra_board_topo="torus",
+                 *args, **kwargs):
         self._board_len = board_len
         self._board_num = board_num
+        self._intra_board_topo = intra_board_topo
 
         self.intra_board_link_prop = {
             "bw": 10,
@@ -218,7 +228,7 @@ class HAECCube(BaseTopo):
         self._update_dpid_table(dpid, sname)
         return dpid
 
-    @util.print_time_func(logger.debug)
+    # @util.print_time_func(logger.debug)
     def _build_one_board(self, board_idx, topo="torus"):
 
         if topo not in self.INTRA_BOARD_TOPOS:
@@ -227,6 +237,7 @@ class HAECCube(BaseTopo):
         logger.info(
             "[HAECCube] Topology used for intra-board connection: {}".format(topo))
 
+        sws = list()
         n = self._board_len
         node_idx = 1
         for x in range(n):
@@ -238,6 +249,7 @@ class HAECCube(BaseTopo):
                                                        y+1, board_idx + 1),
                              mac=make_mac(node_idx),
                              **self._host_kargs)
+                sws.append(sname)
                 self.addSwitch(sname,
                                # The DPID match the name of the switch
                                dpid=self._make_dpid(
@@ -267,5 +279,24 @@ class HAECCube(BaseTopo):
         elif topo == "mesh":
             pass
 
+        elif topo == "dummy":
+            self.addLinkNamedIfce(
+                "s111", "s121", **self.intra_board_link_prop
+            )
+
+        return sws[:]
+
+    def connect_boards(self, boards, mode="1to1"):
+        if len(boards) == 1:
+            raise RuntimeError("Invalid board number.")
+        logger.info("Connect boards with mode: %s", mode)
+        boards = list(map(sorted, boards))
+        for b_idx in range(0, len(boards) - 1):
+            for s_a, s_b in zip(boards[b_idx], boards[b_idx + 1]):
+                self.addLinkNamedIfce(s_a, s_b)
+
     def build(self):
-        self._build_one_board(0)  # step by step
+        boards = [
+            self._build_one_board(idx) for idx in range(0, 3)
+        ]
+        self.connect_boards(boards)

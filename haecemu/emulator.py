@@ -246,6 +246,7 @@ class Emulator(object):
             # --- Public API ---
 
     def setup(self, topo, run_ctl=True,
+              local_test=False,
               dp_wait=30, placement="all_in_one",
               switch=OVSSwitch):
         """Setup an emulation experiment
@@ -259,21 +260,27 @@ class Emulator(object):
         self._run_ctl = run_ctl
         if self._run_ctl:
             self._run_controller(topo)
-        self._cluster = maxinet.Cluster()
-        try:
-            self._exp = maxinet.Experiment(
-                self._cluster, topo, switch=switch,
-                nodemapping=self._get_placement_mapping(placement)
-            )
-            self._pre_exp_setup()
-            self._exp.setup()
-        except Exception as e:
-            logger.error(e)
-            self.cleanup()
+        self._local_test = local_test
 
-        self._check_dps_conn(wait=dp_wait)
+        if self._local_test:
+            logger.info("[SETUP] Run local test")
+            pass
+        else:
+            self._cluster = maxinet.Cluster()
+            try:
+                self._exp = maxinet.Experiment(
+                    self._cluster, topo, switch=switch,
+                    nodemapping=self._get_placement_mapping(placement)
+                )
+                self._pre_exp_setup()
+                self._exp.setup()
+            except Exception as e:
+                logger.error(e)
+                self.cleanup()
 
-        return self._exp
+            self._check_dps_conn(wait=dp_wait)
+
+            return self._exp
 
     def cleanup(self):
         """Cleanup an emulation experiment"""

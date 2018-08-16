@@ -56,6 +56,8 @@ Vagrant.configure("2") do |config|
     frontend.vm.provision :shell, inline: $install_ryu
     frontend.vm.network "private_network", ip: "10.0.1.11"
 
+    frontend.vm.network "forwarded_port", guest:80, host:8080
+
     # VirtualBox-specific configuration
     frontend.vm.provider "virtualbox" do |vb|
       vb.name = "ubuntu-16.04-frontend"

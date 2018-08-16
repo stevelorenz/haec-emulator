@@ -61,8 +61,7 @@ class HAECCubeApp(app_manager.RyuApp):
         sw = get_switch(self, dp.id)[0]
         ports = sw.ports  # All ports of a switch
         cur_pos = dpid_lib.dpid_to_str(dp.id)[-3:]
-        # dst_pos = self.ip_to_sw[ip]
-        dst_pos = "".join(ip.split(".")[-3:])
+        dst_pos = self.ip_to_sw[ip]
 
         self.logger.debug(
             "Current position: {}, destination position: {}".format(cur_pos,
