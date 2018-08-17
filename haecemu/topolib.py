@@ -75,6 +75,7 @@ class BaseTopo(Topo):
         else:
             logger.info("[TOPO] Use processes.")
 
+        self.name = ""
         self.dpid_table = {}  # map of switch name and DPIDs
 
         super(BaseTopo, self).__init__(*args, **kwargs)
@@ -199,6 +200,9 @@ class HAECCube(BaseTopo):
     def __init__(self, board_len=3, board_num=3,
                  intra_board_topo="torus",
                  *args, **kwargs):
+
+        self.name = "haeccube"
+
         self._board_len = board_len
         self._board_num = board_num
         self._intra_board_topo = intra_board_topo
@@ -228,7 +232,12 @@ class HAECCube(BaseTopo):
         self._update_dpid_table(dpid, sname)
         return dpid
 
-    # @util.print_time_func(logger.debug)
+    def _make_mac(self, x, y, board_idx):
+        suffix = ":".join([hex(i)[2:] for i in (x, y, board_idx)])
+        mac = ":".join(("00:00:00", suffix))
+        return mac
+
+    @util.print_time_func(logger.debug)
     def _build_one_board(self, board_idx, topo="torus"):
 
         if topo not in self.INTRA_BOARD_TOPOS:
@@ -247,7 +256,7 @@ class HAECCube(BaseTopo):
                 self.addHost(hname,
                              ip="10.{}.{}.{}/8".format(x+1,
                                                        y+1, board_idx + 1),
-                             mac=make_mac(node_idx),
+                             mac=self._make_mac(x+1, y+1, board_idx + 1),
                              **self._host_kargs)
                 sws.append(sname)
                 self.addSwitch(sname,

@@ -9,6 +9,7 @@ About: HAEC emulator
 
 import json
 import multiprocessing
+import random
 import shlex
 import subprocess
 import time
@@ -395,12 +396,51 @@ class Emulator(object):
             print("Host: {}".format(h.name))
             print(ret)
 
-    def ping2hosts(self, h1, h2, count=3):
-        pass
-
-    def random_iperf_udp(self):
-        pass
-
     def cli(self):
-        """CLI"""
+        """Open MaxiNet CLI"""
         self._exp.CLI(locals(), globals())
+
+    # --- Dev for Service Migration ---
+
+    def swap_ip(self, h1, h2, rp_len=8, add_arp=True):
+        """Swap the IP of two hosts
+
+        This is used to change the routing when APPs on two hosts is migrated
+        (swapped). After changing IP, the ARP cache is cleared to update mac
+        table of the SDN controller
+        """
+        h2ifce = self._ctl_get_req("/ifcetable")  # host interface table
+        h1_nw = self._exp.get_node(h1)
+        h2_nw = self._exp.get_node(h2)
+        h1_ip = h1_nw.IP(intf=h2ifce[h1_nw.name])
+        h2_ip = h2_nw.IP(intf=h2ifce[h2_nw.name])
+
+        h1_nw.cmd("ip addr flush dev {}".format(h2ifce[h1_nw.name]))
+        h1_nw.setIP(h2_ip, intf=h2ifce[h1_nw.name])
+        h1_nw.cmd("ip -s -s neigh flush all")
+
+        h2_nw.cmd("ip addr flush dev {}".format(h2ifce[h2_nw.name]))
+        h2_nw.setIP(h1_ip, intf=h2ifce[h2_nw.name])
+        h2_nw.cmd("ip -s -s neigh flush all")
+
+        # MARK: MAC is unchanged for each host
+        if add_arp:
+            h1_nw.setARP(h1_ip, h2_nw.MAC())
+            h2_nw.setARP(h2_ip, h1_nw.MAC())
+
+    def migrate_proc(self, h1, h2, exe_name, exe_path):
+        pass
+
+    # --- Orchestrator Funcs ---
+    # TODO: Should be moved to haecemu/orchestrator.py and communicate with IPC
+
+    def get_free_pos(self, host):
+        pass
+
+    # --- Only for Debug and Test ---
+
+    def swap_ips_random(self, num=3):
+        for n in range(num):
+            h1, h2 = random.sample(self._topo.hosts(), 2)
+            logger.debug("Round: %s, h1: %s, h2 %s", n, h1, h2)
+            self.swap_ip(h1, h2)

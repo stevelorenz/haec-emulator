@@ -16,10 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import hashlib
 import json
-import os
-import random
+# import random
 import time
 
 import numpy as np
@@ -28,8 +26,9 @@ from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import (CONFIG_DISPATCHER, MAIN_DISPATCHER,
                                     set_ev_cls)
-from ryu.lib.packet import ether_types, ethernet, packet, arp, ipv4
+from ryu.lib.packet import arp, ether_types, ethernet, ipv4, packet
 from ryu.ofproto import ofproto_v1_3
+from ryu.lib import dpid as dpid_lib
 
 
 class Edge:
@@ -69,6 +68,9 @@ class Node:
     def set_cost(self, dst, cost):
         self.neighbors[dst].cost = cost
 
+    def to_json(self):
+        pass
+
 
 class Flow:
     def __init__(self, node, next, src, dst, timeout):
@@ -81,16 +83,16 @@ class Flow:
 
 class HaecController(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    # TOPOLOGY_JSON = None
+
+    _CONTEXTS = {'wsgi': WSGIApplication}
 
     def __init__(self, *args, **kwargs):
         super(HaecController, self).__init__(*args, **kwargs)
         self.nodes = {}
         self.flows = []
         self.mac_to_node = {}
-
-        # HaecController.TOPOLOGY_JSON = os.path.realpath(os.path.dirname(
-        #    os.path.realpath(__file__)) + "/../visualisation/topo.json")
+        self.ip_to_node = {}  # MARK: to support Docker
+        self.host_to_ifce = {}
 
         wsgi = kwargs['wsgi']
         wsgi.register(HaecRest, {'haec_api_app': self})
@@ -133,11 +135,12 @@ class HaecController(app_manager.RyuApp):
                     src
                 )
 
-            # MARK: "h" != ord("h")
+            # MARK: "h" != ord("h") for python2
             if dst[0] == "h":
                 self.logger.debug("[PORT_DESC_REPLY] Set node %s with host %s",
                                   src, port.port_no)
                 node.set_host(port.port_no)
+                self.host_to_ifce[dst] = "{}-{}".format(dst, src)
             else:
                 node.add_neighbor(dst, port.port_no)
 
@@ -152,14 +155,11 @@ class HaecController(app_manager.RyuApp):
                                     priority=priority, match=match,
                                     instructions=inst, **kwargs)
         else:
-            self.logger.debug("Add flow without buffer ID")
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst, **kwargs)
         datapath.send_msg(mod)
 
     def add_broadcast(self, src, dst, prev, timeout, **kwargs):
-        self.logger.debug("[BROADCAST] Nodes: %s")
-        self.logger.debug(self.nodes)
 
         next_hop = {v: [] for v in self.nodes}
         for d, s in prev.items():
@@ -175,11 +175,10 @@ class HaecController(app_manager.RyuApp):
             node = self.nodes[name]
             dp = node.datapath
             parser = dp.ofproto_parser
-            ofproto = dp.ofproto
+            # ofproto = dp.ofproto
 
             ports = [node.host] + [p for _, p in next]
-            self.logger.debug("[BROADCAST] Ports")
-            self.logger.debug(ports)
+            self.logger.debug("[BROADCAST] Output ports: %s", json.dumps(ports))
 
             flow = Flow(node, [self.nodes[v]
                                for v, _ in next], src, dst, timeout)
@@ -195,7 +194,7 @@ class HaecController(app_manager.RyuApp):
         edge = node.neighbors[next.name]
         dp = node.datapath
         parser = dp.ofproto_parser
-        ofproto = dp.ofproto
+        # ofproto = dp.ofproto
 
         flow = Flow(node, [next], src, dst, timeout)
         self.flows.append(flow)
@@ -250,7 +249,7 @@ class HaecController(app_manager.RyuApp):
         node.neighbors[dst].cost = cost
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def _packet_in_handler(self, ev):
+    def packet_in_handler(self, ev):
         # If you hit this you might want to increase
         # the "miss_send_length" of your switch
         if ev.msg.msg_len < ev.msg.total_len:
@@ -288,14 +287,15 @@ class HaecController(app_manager.RyuApp):
         name = port.name[:4]
         src_node = self.nodes[name]
 
+        # Packet from host -> interface name sxxx-hxxx
         if port.name[5:6] == b'h':
-            self.logger.debug("Learn a new MAC, SRC: %s, node name: %s", src,
-                              name)
+            self.logger.debug("")
             self.mac_to_node[src] = src_node
 
         _, prev = self.dijkstra(src_node)
 
         dst_node = self.mac_to_node.get(dst)
+
         if not dst_node:
             # setup broadcast
             self.add_broadcast(src, dst, prev, timeout=1)
@@ -324,6 +324,25 @@ class HaecController(app_manager.RyuApp):
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
 
+        @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+        def port_status_handler(self, ev):
+            msg = ev.msg
+            reason = msg.reason
+            port_no = msg.desc.port_no
+            dp = msg.datapath
+            ofproto = msg.datapath.ofproto
+
+            self.logger.info("Datapath ID: %s", dpid_lib.dpid_to_str(dp.id))
+            if reason == ofproto.OFPPR_ADD:
+                self.logger.info("Port added %s", port_no)
+            elif reason == ofproto.OFPPR_DELETE:
+                self.logger.info("Port deleted %s", port_no)
+                # delete entry in the mac table
+            elif reason == ofproto.OFPPR_MODIFY:
+                self.logger.info("Port modified %s", port_no)
+            else:
+                self.logger.info("Illeagal port state %s %s", port_no, reason)
+
 
 class HaecRest(ControllerBase):
     def __init__(self, req, link, data, **config):
@@ -342,7 +361,7 @@ class HaecRest(ControllerBase):
         ]
         body = json.dumps(data)
         res = Response(content_type='application/json', body=body)
-        # res._headerlist.append(('Access-Control-Allow-Origin', '*'))
+        res._headerlist.append(('Access-Control-Allow-Origin', '*'))
         return res
 
     @route('topology', '/nodes')
@@ -354,7 +373,7 @@ class HaecRest(ControllerBase):
         }
         body = json.dumps(data)
         res = Response(content_type='application/json', body=body)
-        # res._headerlist.append(('Access-Control-Allow-Origin', '*'))
+        res._headerlist.append(('Access-Control-Allow-Origin', '*'))
         return res
 
     @route('topology', '/nodes/{source}/links/{dest}', methods=['PUT'])
@@ -364,6 +383,38 @@ class HaecRest(ControllerBase):
             kwargs["source"].encode(), kwargs["dest"].encode(), cost)
         res = Response(status=200)
         return res
+
+    @route('topology', '/mactable', methods=['GET'])
+    def list_mac_table(self, req, **kwargs):
+        body = json.dumps(self.haec_api_app.mac_to_node.keys())
+        return Response(content_type='application/json', body=body)
+
+    @route('topology', '/ifcetable', methods=['GET'])
+    def list_host_ifce_table(self, req, **kwargs):
+        body = json.dumps(self.haec_api_app.host_to_ifce)
+        return Response(content_type='application/json', body=body)
+
+    # @route('topology', "/mactable/{dpid}", methods=['PUT'],
+    #       requirements={'dpid': dpid_lib.DPID_PATTERN})
+    # def put_mac_table(self, req, **kwargs):
+
+    #    haec_api = self.haec_api_app
+    #    dpid = dpid_lib.str_to_dpid(kwargs['dpid'])
+    #    try:
+    #        new_entry = req.json if req.body else {}
+    #    except ValueError:
+    #        raise Response(status=400)
+
+    #    if dpid not in haec_api.mac_to_node:
+    #        return Response(status=404)
+
+    #    try:
+    #        mac_table = haec_api.set_mac_to_port(dpid, new_entry)
+    #        body = json.dumps(mac_table)
+    #        return Response(content_type='application/json', body=body)
+    #    except Exception as e:
+    #        self.logger.error(e)
+    #        return Response(status=500)
 
     # TODO: Check static app
     # @route('topology', '/{filename:.*}')

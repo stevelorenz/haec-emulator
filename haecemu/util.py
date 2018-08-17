@@ -28,9 +28,10 @@ def print_time_func(p_func, fmt=None):
         @wraps(f)
         def wrapper(*args, **kwargs):
             t_s = time.time()
-            f(*args, **kwargs)
+            ret = f(*args, **kwargs)
             p_func("Time it took to run func {} : {} seconds".format(
                 f.__name__, time.time() - t_s
             ))
+            return ret
         return wrapper
     return time_func
