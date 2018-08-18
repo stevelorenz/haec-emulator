@@ -5,7 +5,7 @@
 
 HAECEMU = haecemu/*.py
 CONTROLLER_APPS = controller/*.py
-TEST = haecemu/test/*.py
+TEST = $(shell find haecemu/test -name '*.py')
 EXAMPLES = ./examples/*.py
 SH_SCRIPTS = ./script/*.sh
 PYTHON ?= python
@@ -20,6 +20,10 @@ all:
 errcheck: $(PYSRC)
 	@echo "# Running check for errors only"
 	pyflakes $(PYSRC)
+
+errcheck-all: $(PYSRC) $(TEST)
+	@echo "# Running check for errors only"
+	pyflakes $(PYSRC) $(TEST)
 
 errcheck-lint: $(PYSRC)
 	@echo "# Running check for errors only"

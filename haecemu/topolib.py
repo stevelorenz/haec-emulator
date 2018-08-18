@@ -50,6 +50,13 @@ def make_mac(idx):
         rand_byte() + ":00:00:" + hex(idx)[2:]
 
 
+class HostWorker(object):
+
+    def __init__(self, name, cost):
+        self._name = name
+        self._cost = cost
+
+
 class BaseTopo(Topo):
 
     """Base topology class"""
@@ -77,6 +84,7 @@ class BaseTopo(Topo):
 
         self.name = ""
         self.dpid_table = {}  # map of switch name and DPIDs
+        self.host_ifce_table = {}
 
         super(BaseTopo, self).__init__(*args, **kwargs)
 
@@ -269,6 +277,7 @@ class HAECCube(BaseTopo):
                 # always 1. Important for routing!
                 self.addLinkNamedIfce(
                     sname, hname, **self.intra_board_link_prop)
+                self.host_ifce_table[hname] = "{}-{}".format(hname, sname)
 
                 node_idx += 1
 

@@ -12,13 +12,14 @@ import multiprocessing
 import random
 import shlex
 import subprocess
+import threading
 import time
 from os import path
 from urlparse import urljoin
 
 import requests
 
-from haecemu import log, topolib
+from haecemu import log, topolib, util
 from MaxiNet.Frontend import maxinet
 from mininet.node import OVSSwitch
 
@@ -137,6 +138,9 @@ class Emulator(object):
 
     def _query_workload(self, host_id):
         # TODO: Replace with a better net based method
+        if self._mode == "test":
+            random.seed(time.time())
+            return (random.random() * 100)
         workload = self._exp.get_node(host_id).cmd(
             "echo $[100-$(vmstat 1 2|tail -1|awk '{print $15}')]")
         workload = int(workload.strip())
@@ -199,14 +203,24 @@ class Emulator(object):
             wk.run_cmd("sudo systemctl restart openvswitch-switch.service")
             logger.info("Restart OVS service on worker {}".format(wk.ip()))
 
-    def _get_placement_mapping(self, placement):
+    def _get_placement_mapping(self, placement="round_robin"):
+        """ Get placement mapping dict for nodes
+
+        :param placement (str): Placement algorithm
+        """
         mapping = {}
-        # Check if each host has a directly-connected switch
-        # https://github.com/MaxiNet/MaxiNet/wiki/Docker-Containers
-        for node in self._topo.switches():
-            mapping[node] = 0
-        logger.debug("[SETUP] Placement mapping: ")
-        logger.debug(mapping)
+        wk_num = len(self._cluster.worker)
+        hosts = self._topo.hosts()
+        if placement == "round_robin":
+            for idx, node in enumerate(self._topo.switches()):
+                # Check if each host has a directly-connected switch
+                # https://github.com/MaxiNet/MaxiNet/wiki/Docker-Containers
+                for h in hosts:
+                    if h[1:4] == node[1:4]:
+                        mapping[h] = idx % wk_num
+                mapping[node] = idx % wk_num
+
+        logger.debug("[SETUP] Placement mapping: %s", json.dumps(mapping))
         return mapping
 
     def _pre_exp_setup(self):
@@ -248,7 +262,7 @@ class Emulator(object):
 
     def setup(self, topo, run_ctl=True,
               local_test=False,
-              dp_wait=30, placement="all_in_one",
+              dp_wait=30, placement="round_robin",
               switch=OVSSwitch):
         """Setup an emulation experiment
 
@@ -272,6 +286,10 @@ class Emulator(object):
                 self._exp = maxinet.Experiment(
                     self._cluster, topo, switch=switch,
                     nodemapping=self._get_placement_mapping(placement)
+                )
+                logger.info(
+                    "[SETUP] Setup MaxiNet experiment, placement algorithm: %s",
+                    placement
                 )
                 self._pre_exp_setup()
                 self._exp.setup()
@@ -409,7 +427,7 @@ class Emulator(object):
         (swapped). After changing IP, the ARP cache is cleared to update mac
         table of the SDN controller
         """
-        h2ifce = self._ctl_get_req("/ifcetable")  # host interface table
+        h2ifce = self._topo.host_ifce_table
         h1_nw = self._exp.get_node(h1)
         h2_nw = self._exp.get_node(h2)
         h1_ip = h1_nw.IP(intf=h2ifce[h1_nw.name])
@@ -428,13 +446,48 @@ class Emulator(object):
             h1_nw.setARP(h1_ip, h2_nw.MAC())
             h2_nw.setARP(h2_ip, h1_nw.MAC())
 
-    def migrate_proc(self, h1, h2, exe_name, exe_path):
-        pass
+    def migrate_proc(self, h_src, h_dst, exe_name, exe_cmd):
+        """ "Migrate" programs from h_src to h_dst """
+        h_src_nw = self._exp.get_node(h_src)
+        h_dst_nw = self._exp.get_node(h_dst)
+        # kill the proc on the old one
+        h_src_nw.cmd("killall {}".format(exe_name))
+        # run proc on the second host
+        h_dst_nw.cmd("{}".format(exe_cmd))
+
+    def _get_host_bw(self, h, h2ifce, bw):
+        h_nw = self._exp.get_node(h)
+        rx_cmd = "cat /sys/class/net/{}/statistics/rx_bytes".format(h2ifce[h])
+        tx_cmd = "cat /sys/class/net/{}/statistics/tx_bytes".format(h2ifce[h])
+        rx_prev = int(h_nw.cmd(rx_cmd).strip())
+        tx_prev = int(h_nw.cmd(tx_cmd).strip())
+        time.sleep(1)
+        rx_bw = int(h_nw.cmd(rx_cmd).strip()) - rx_prev  # bytes per second
+        tx_bw = int(h_nw.cmd(tx_cmd).strip()) - tx_prev
+        bw[h] = (rx_bw, tx_bw)
+
+    @util.print_time_func(logger.debug)
+    def get_hosts_bw(self, hosts):
+        """Monitor bandwidth of hosts"""
+        bw = {}
+        h2ifce = self._topo.host_ifce_table
+        ths = [threading.Thread(target=self._get_host_bw,
+                                args=(h, h2ifce, bw)) for h in hosts]
+        for th in ths:
+            th.start()
+
+        for th in ths:
+            th.join()
+        logger.debug("[MONITOR] Bandwidth dict: %s", json.dumps(bw))
+        return bw
+
+    # --- Measurement ---
 
     # --- Orchestrator Funcs ---
     # TODO: Should be moved to haecemu/orchestrator.py and communicate with IPC
 
-    def get_free_pos(self, host):
+    def get_best_pos(self, src):
+        """Get the place to communicate with src node"""
         pass
 
     # --- Only for Debug and Test ---
@@ -444,3 +497,18 @@ class Emulator(object):
             h1, h2 = random.sample(self._topo.hosts(), 2)
             logger.debug("Round: %s, h1: %s, h2 %s", n, h1, h2)
             self.swap_ip(h1, h2)
+
+    def run_iperf_daemon(self, hosts):
+        for h in hosts:
+            h_nw = self._exp.get_node(h)
+            self.run_task_bg(h, "iperf3 -s {} -D".format(h_nw.IP()))
+
+    def kill_iperf_daemon(self, hosts):
+        for h in hosts:
+            self.run_task_bg(h, "killall iperf3")
+
+    def run_iperf_udp(self, src, dst, dur=30):
+        dst_nw = self._exp.get_node(dst)
+        self.run_task_bg(
+            src, "iperf3 -c {} -u -t {}".format(dst_nw.IP(), dur)
+        )
