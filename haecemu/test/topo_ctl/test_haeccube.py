@@ -12,7 +12,9 @@ emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = HAECCube(host_type="process", board_len=2)
+    topo = HAECCube(host_type="process", board_len=2,
+                    intra_board_topo="mesh"
+                    )
     exp = emu.setup(topo, run_ctl=True)
     emu.swap_ips_random(10)
 
@@ -20,7 +22,10 @@ try:
     emu.run_iperf_daemon(topo.hosts())
     for _ in range(2):
         src, dst = random.sample(topo.hosts(), 2)
-        print("[TEST] Run Iperf UDP traffic, SRC: {}, DST, {}".format(src, dst))
+        print(
+            "[TEST] Run Iperf UDP traffic, SRC: {}, DST, {}, Dist: {}".format(
+                src, dst, topo.get_node_dist(src, dst))
+        )
         emu.run_iperf_udp(src, dst)
     for i in range(10):
         bw = emu.get_hosts_bw(sorted(topo.hosts())[:])

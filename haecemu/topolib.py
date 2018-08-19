@@ -11,6 +11,7 @@ MARK:
         - bw: Mbps, delay: ms, loss: %, max_queue_size: n
 """
 
+import json
 from random import randint
 
 from haecemu import log, util
@@ -246,7 +247,7 @@ class HAECCube(BaseTopo):
         return mac
 
     @util.print_time_func(logger.debug)
-    def _build_one_board(self, board_idx, topo="torus"):
+    def _build_one_board(self, board_idx, topo):
 
         if topo not in self.INTRA_BOARD_TOPOS:
             logger.error("[HAECCube] Unknown topology to build a single board.")
@@ -295,7 +296,29 @@ class HAECCube(BaseTopo):
                             self.addLinkNamedIfce(
                                 s, nb, ** self.intra_board_link_prop)
         elif topo == "mesh":
-            pass
+            for x in range(n):
+                for y in range(n):
+                    s = "s{}{}{}".format(x+1, y+1, board_idx+1)
+                    if x == n - 1 and y == n - 1:
+                        continue
+                    elif y == n - 1:
+                        neighbours = (
+                            "s{}{}{}".format((x+1) + 1, y+1, board_idx+1),
+                        )
+                    elif x == n - 1:
+                        neighbours = (
+                            "s{}{}{}".format(x+1, (y+1)+1, board_idx+1),
+                        )
+                    else:
+                        neighbours = (
+                            "s{}{}{}".format(x+1, (y+1) + 1, board_idx+1),
+                            "s{}{}{}".format((x+1) + 1, y+1, board_idx+1)
+                        )
+                    for nb in neighbours:
+                            # Check if is a duplicated link
+                        if (nb, s) not in self.links():
+                            self.addLinkNamedIfce(
+                                s, nb, ** self.intra_board_link_prop)
 
         elif topo == "dummy":
             self.addLinkNamedIfce(
@@ -315,6 +338,18 @@ class HAECCube(BaseTopo):
 
     def build(self):
         boards = [
-            self._build_one_board(idx) for idx in range(0, 3)
+            self._build_one_board(idx, self._intra_board_topo)
+            for idx in range(0, 3)
         ]
         self.connect_boards(boards)
+
+    def get_node_dist(self, src, dst):
+        assert len(src) == len(dst)
+        if self._intra_board_topo == "mesh":
+            return [abs(int(c1) - int(c2)) for c1, c2 in zip(src[1:], dst[1:])]
+        else:
+            raise RuntimeError("Not implemented yet")
+
+    def get_link_energy_cost(self, src, dst):
+        dists = self.get_node_dist(src, dst)
+        return sum([d*c for d, c in zip(dists, (5.0, 5.0, 25.0))])

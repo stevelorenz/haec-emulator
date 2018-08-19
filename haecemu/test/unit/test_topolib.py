@@ -24,16 +24,20 @@ class testTopolib(unittest.TestCase):
                 (2, 2),
                 (3, 3),
         ):
-            haec_cube = topolib.HAECCube(board_len, board_num)
+            haec_cube = topolib.HAECCube(board_len, board_num,
+                                         intra_board_topo="mesh")
             print(sorted(haec_cube.nodes()))
             print(sorted(haec_cube.links()))
 
             # Check if there are duplicated links
             valid_links = list()
             for link in haec_cube.links():
-                if tuple(reversed(link)) in sorted(haec_cube.links()):
+                if tuple(reversed(link)) in (haec_cube.links()):
                     raise RuntimeError(
                         "Link {} is a duplicated link".format(link))
+
+        print(haec_cube.get_link_energy_cost("h111", "h222"))
+        print(haec_cube.get_link_energy_cost("h111", "h121"))
 
     def tearDown(self):
         pass

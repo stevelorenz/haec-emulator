@@ -258,8 +258,6 @@ class Emulator(object):
                     wk.run_cmd("sudo ip link delete {}".format(gre))
                     wk.run_cmd("sudo ip link delete {}tap".format(gre))
 
-            # --- Public API ---
-
     def setup(self, topo, run_ctl=True,
               local_test=False,
               dp_wait=30, placement="round_robin",
@@ -343,18 +341,16 @@ class Emulator(object):
         r = requests.put(req_url, data=proc_md)
         logger.debug("Status code: {}, text: {}".format(r.status_code, r.text))
 
-    def mod_processor(self, host_id, opt):
-        pass
-
-    def run_task_bg(self, host_id, cmd):
+    def run_task_bg(self, host_id, cmd, out=None):
         node = self._exp.get_node(host_id)
-        ret = node.cmd("{} > /dev/null 2>&1 &".format(cmd))
-        if ret != 0:
-            pass
+        if out:
+            node.cmd("{} > {} 2>&1 &".format(out, cmd))
+        else:
+            node.cmd("{} > /dev/null 2>&1 &".format(cmd))
 
     def stop_task_bg(self, host_id, cmd):
         node = self._exp.get_node(host_id)
-        node.cmd("killall {}".format(cmd))
+        node.cmd("sudo killall {}".format(cmd))
 
     def _monitor_processor(self, cycle=3):
         """Run monitoring for flows and processors"""
@@ -446,14 +442,16 @@ class Emulator(object):
             h1_nw.setARP(h1_ip, h2_nw.MAC())
             h2_nw.setARP(h2_ip, h1_nw.MAC())
 
-    def migrate_proc(self, h_src, h_dst, exe_name, exe_cmd):
-        """ "Migrate" programs from h_src to h_dst """
-        h_src_nw = self._exp.get_node(h_src)
-        h_dst_nw = self._exp.get_node(h_dst)
-        # kill the proc on the old one
-        h_src_nw.cmd("killall {}".format(exe_name))
-        # run proc on the second host
-        h_dst_nw.cmd("{}".format(exe_cmd))
+    def migrate_server(self, clt, h_prev, h_cur, proc_cmd):
+        self.swap_ip(h_prev, h_cur)
+        # Client refresh ARP table
+        clt_nw = self._exp.get_node(clt)
+        clt_nw.cmd("ip -s -s neigh flush all")
+
+        nw = self._exp.get_node(h_prev)
+        nw.cmd("sudo killall {}".format(proc_cmd))
+        nw = self._exp.get_node(h_cur)
+        nw.cmd("{}".format(proc_cmd))
 
     def _get_host_bw(self, h, h2ifce, bw):
         h_nw = self._exp.get_node(h)
@@ -481,14 +479,8 @@ class Emulator(object):
         logger.debug("[MONITOR] Bandwidth dict: %s", json.dumps(bw))
         return bw
 
-    # --- Measurement ---
-
     # --- Orchestrator Funcs ---
     # TODO: Should be moved to haecemu/orchestrator.py and communicate with IPC
-
-    def get_best_pos(self, src):
-        """Get the place to communicate with src node"""
-        pass
 
     # --- Only for Debug and Test ---
 
