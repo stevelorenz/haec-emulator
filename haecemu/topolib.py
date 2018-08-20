@@ -185,6 +185,12 @@ class SimpleFatTree(BaseTopo):
             toDo = newToDo
             bw = 2.0 * bw
 
+    def get_node_dist(self, src, dst):
+        pass
+
+    def get_link_energy_cost(self, src, dst):
+        pass
+
 
 class HAECCube(BaseTopo):
     """HAEC cube topology: 3-dimensional hypercube
@@ -201,14 +207,14 @@ class HAECCube(BaseTopo):
     class.
     """
 
-    # ctl_prog = "ryu_haeccube.py"
     ctl_prog = "ryu_haeccube_dijkstra.py"
 
     INTRA_BOARD_TOPOS = ("dummy", "torus", "mesh")
 
     def __init__(self, board_len=3, board_num=3,
                  intra_board_topo="torus",
-                 *args, **kwargs):
+                 link_energy_cost=None,
+                 * args, **kwargs):
 
         self.name = "haeccube"
 
@@ -228,6 +234,11 @@ class HAECCube(BaseTopo):
             "delay": 0.5,
             "loss": 5
         }
+
+        if not link_energy_cost:
+            self.link_energy_cost = (5.0, 5.0, 25.0)
+        else:
+            self.link_energy_cost = link_energy_cost
 
         super(HAECCube, self).__init__(*args, **kwargs)
         logger.info(
@@ -321,9 +332,7 @@ class HAECCube(BaseTopo):
                                 s, nb, ** self.intra_board_link_prop)
 
         elif topo == "dummy":
-            self.addLinkNamedIfce(
-                "s111", "s121", **self.intra_board_link_prop
-            )
+            pass
 
         return sws[:]
 
@@ -346,10 +355,37 @@ class HAECCube(BaseTopo):
     def get_node_dist(self, src, dst):
         assert len(src) == len(dst)
         if self._intra_board_topo == "mesh":
-            return [abs(int(c1) - int(c2)) for c1, c2 in zip(src[1:], dst[1:])]
+            return [abs(int(c1) - int(c2)) for c1, c2 in zip(src[1:4], dst[1:4])]
         else:
             raise RuntimeError("Not implemented yet")
 
+    # TODO: Should be implemented in the SDN controller -> link enery depends
+    # on the traffic state. Also migrate should support overlapping
+    # --------------------------------------------------------------------------
+
     def get_link_energy_cost(self, src, dst):
+        """Get the link enery cost between src and dst"""
         dists = self.get_node_dist(src, dst)
-        return sum([d*c for d, c in zip(dists, (5.0, 5.0, 25.0))])
+        return sum([d*c for d, c in zip(dists, self.link_energy_cost)])
+
+    def get_migrate_dst_hops(self, src, dst):
+        """Get hops to migrate the dst towards src"""
+        assert len(src) == len(dst)
+        hops = []
+        s_il, d_il = (map(int, t) for t in (src[1:4], dst[1:4]))
+        # z -> y -> x
+        for idx in range(2, -1, -1):
+            s, d = s_il[idx], d_il[idx]
+            if d > s:
+                while d > s:
+                    d_il[idx] = d - 1
+                    hops.append("h" + "".join(map(str, d_il)))
+                    d = d - 1
+            elif s > d:
+                while d < s:
+                    d_il[idx] = d + 1
+                    hops.append("h" + "".join(map(str, d_il)))
+                    d = d + 1
+            else:
+                pass
+        return hops[:-1]

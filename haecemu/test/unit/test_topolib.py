@@ -20,24 +20,31 @@ class testTopolib(unittest.TestCase):
         self.assertEqual(sft.hosts(), ['h1', 'h2'])
 
     def test_haeccube_fix(self):
-        for board_len, board_num in (
-                (2, 2),
-                (3, 3),
-        ):
-            haec_cube = topolib.HAECCube(board_len, board_num,
-                                         intra_board_topo="mesh")
-            print(sorted(haec_cube.nodes()))
-            print(sorted(haec_cube.links()))
+        haec_cube = topolib.HAECCube(2, 2,
+                                     intra_board_topo="mesh")
+        # Check if there are duplicated links
+        valid_links = list()
+        for link in haec_cube.links():
+            if tuple(reversed(link)) in (haec_cube.links()):
+                raise RuntimeError(
+                    "Link {} is a duplicated link".format(link))
 
-            # Check if there are duplicated links
-            valid_links = list()
-            for link in haec_cube.links():
-                if tuple(reversed(link)) in (haec_cube.links()):
-                    raise RuntimeError(
-                        "Link {} is a duplicated link".format(link))
+        haec_cube = topolib.HAECCube(3, 3,
+                                     intra_board_topo="mesh")
+        # Check if there are duplicated links
+        valid_links = list()
+        for link in haec_cube.links():
+            if tuple(reversed(link)) in (haec_cube.links()):
+                raise RuntimeError(
+                    "Link {} is a duplicated link".format(link))
 
-        print(haec_cube.get_link_energy_cost("h111", "h222"))
-        print(haec_cube.get_link_energy_cost("h111", "h121"))
+        dist = haec_cube.get_node_dist("h111", "h333")
+        self.assertEqual(dist, [2, 2, 2])
+
+        hops = haec_cube.get_migrate_dst_hops("h111", "h333")
+        self.assertEqual(hops, ['h332', 'h331', 'h321', 'h311', 'h211'])
+        hops = haec_cube.get_migrate_dst_hops("h333", "h111")
+        self.assertEqual(hops, ['h112', 'h113', 'h123', 'h133', 'h233'])
 
     def tearDown(self):
         pass

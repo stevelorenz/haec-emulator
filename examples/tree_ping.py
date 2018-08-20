@@ -17,13 +17,9 @@ try:
     # Use docker for each host, alternative: host_type="process"
     topo = SimpleFatTree(hosts=2, host_type="docker")
     exp = emu.setup(topo)
-    print("All hosts: %s".format(",".join(topo.hosts())))
     emu.ping_all()
-    time.sleep(3)
-    emu.run_monitor()
-
-except Exception as e:
-    print(e)
+    emu.cli()
+    emu.wait()
 
 finally:
     emu.cleanup()

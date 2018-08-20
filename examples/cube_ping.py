@@ -14,12 +14,13 @@ emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = HAECCube(host_type="process")
+    topo = HAECCube(host_type="process", board_len=3,
+                    intra_board_topo="mesh")
     exp = emu.setup(topo)
-    print("All hosts: %s".format(",".join(topo.hosts())))
     emu.ping_all()
     time.sleep(3)
-    emu.run_monitor()
+    emu.cli()
+    emu.wait()
 
 finally:
     emu.cleanup()
