@@ -5,8 +5,6 @@
 
 import unittest
 
-import mock
-
 import haecemu.topolib as topolib
 
 
@@ -23,7 +21,6 @@ class testTopolib(unittest.TestCase):
         haec_cube = topolib.HAECCube(2, 2,
                                      intra_board_topo="mesh")
         # Check if there are duplicated links
-        valid_links = list()
         for link in haec_cube.links():
             if tuple(reversed(link)) in (haec_cube.links()):
                 raise RuntimeError(
@@ -32,7 +29,6 @@ class testTopolib(unittest.TestCase):
         haec_cube = topolib.HAECCube(3, 3,
                                      intra_board_topo="mesh")
         # Check if there are duplicated links
-        valid_links = list()
         for link in haec_cube.links():
             if tuple(reversed(link)) in (haec_cube.links()):
                 raise RuntimeError(

@@ -6,6 +6,7 @@
 HAECEMU = haecemu/*.py
 CONTROLLER_APPS = controller/*.py
 TEST = $(shell find haecemu/test -name '*.py')
+UNIT_TEST_PATH = haecemu/test/unit/
 EXAMPLES = ./examples/*.py
 SH_SCRIPTS = ./script/*.sh
 PYTHON ?= python
@@ -29,6 +30,10 @@ errcheck-lint: $(PYSRC)
 	@echo "# Running check for errors only"
 	pyflakes $(PYSRC)
 	pylint -E --rcfile=.pylint $(PYSRC)
+
+run-tests: $(UNIT_TEST_PATH)
+	@echo "# Run all unit tests"
+	python -m unittest discover $(UNIT_TEST_PATH)
 
 install:
 	$(PYTHON) setup.py install

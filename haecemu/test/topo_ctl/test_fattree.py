@@ -1,7 +1,5 @@
 #!/usr/bin/env python2
 
-import time
-
 from haecemu.emulator import Emulator
 from haecemu.topolib import SimpleFatTree
 
@@ -10,13 +8,12 @@ emu._url_create_flow = "put"
 emu._url_push_processor_info = "put"
 
 try:
-    topo = SimpleFatTree(hosts=2, host_type="docker")
+    # topo = SimpleFatTree(hosts=2, host_type="docker")
+    topo = SimpleFatTree(hosts=32, host_type="process")
     exp = emu.setup(topo)
-    print("All hosts: %s".format(",".join(topo.hosts())))
-    emu.ping_all()
-    time.sleep(3)
-    # emu.run_monitor()
     emu.print_docker_status()
+
+    emu.cli()
     emu.wait()
 
 except Exception as e:

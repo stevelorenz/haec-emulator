@@ -5,8 +5,6 @@
 
 import unittest
 
-import mock
-
 from haecemu.emulator import Emulator
 
 

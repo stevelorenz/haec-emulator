@@ -92,23 +92,41 @@ class BaseTopo(Topo):
         logger.debug("[TOPO] DPID table:")
         logger.debug(self.dpid_table)
 
+    def _update_dpid_table(self, dpid, sname):
+        if dpid in self.dpid_table:
+            raise RuntimeError("Duplicated DPIDs")
+        self.dpid_table[dpid] = sname
+
     def addLinkNamedIfce(self, src, dst, *args, **kwargs):
+        """Add a link with named two interfaces"""
         self.addLink(src, dst,
                      intfName1="-".join((src, dst)),
                      intfName2="-".join((dst, src)),
                      * args, **kwargs
                      )
 
-    def _update_dpid_table(self, dpid, sname):
-        if dpid in self.dpid_table:
-            raise RuntimeError("Duplicated DPIDs")
-        self.dpid_table[dpid] = sname
+    def get_node_dist(self, src, dst):
+        """Get the shortest distance between source and destination nodes
 
-    def dumps(self):
+        :param src:
+        :param dst:
+        """
+        raise NotImplementedError
+
+    def get_link_energy_cost(self, src, dst):
+        """Get the energy cost for the link(s) between source and destination
+        nodes
+
+        :param src:
+        :param dst:
+        """
+        raise NotImplementedError
+
+    def dumps(self, path):
         """Dump topology with JSON format"""
         # nodes
         # edges
-        pass
+        json.dumps([])
 
 
 class SingleParentTree(BaseTopo):
@@ -130,6 +148,12 @@ class SingleParentTree(BaseTopo):
         pass
 
     def build(self):
+        pass
+
+    def get_node_dist(self, src, dst):
+        pass
+
+    def get_link_energy_cost(self, src, dst):
         pass
 
 
@@ -359,14 +383,14 @@ class HAECCube(BaseTopo):
         else:
             raise RuntimeError("Not implemented yet")
 
-    # TODO: Should be implemented in the SDN controller -> link enery depends
-    # on the traffic state. Also migrate should support overlapping
-    # --------------------------------------------------------------------------
-
     def get_link_energy_cost(self, src, dst):
         """Get the link enery cost between src and dst"""
         dists = self.get_node_dist(src, dst)
         return sum([d*c for d, c in zip(dists, self.link_energy_cost)])
+
+    # TODO: Should be implemented in the SDN controller -> link enery depends
+    # on the traffic state. Also migrate should support overlapping
+    # --------------------------------------------------------------------------
 
     def get_migrate_dst_hops(self, src, dst):
         """Get hops to migrate the dst towards src"""
