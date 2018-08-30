@@ -11,7 +11,7 @@ import random
 import time
 
 from haecemu.emulator import Emulator
-from haecemu.topolib import HAECCube, SimpleFatTree
+from haecemu.topolib import HAECCube, StaticPerfectFatTree
 
 # Use httpbin just for test HTTP requests
 emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
@@ -20,7 +20,7 @@ emu._url_push_processor_info = "put"
 
 # Run Fattree
 try:
-    tree = SimpleFatTree(host_type="process", hosts=4)
+    tree = StaticPerfectFatTree(host_type="process", hosts=4)
     exp = emu.setup(tree, run_ctl=True)
     emu.cli()
 

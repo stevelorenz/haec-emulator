@@ -13,11 +13,25 @@ class testTopolib(unittest.TestCase):
     def setUp(self):
         pass
 
-    def test_simplefattree(self):
-        sft = topolib.SimpleFatTree(hosts=2)
+    def test_staticperfectfattree(self):
+
+        with self.assertRaisesRegexp(topolib.TopolibError,
+                                     "StaticPerfectFatTree supports only perfect tree."):
+            sft = topolib.StaticPerfectFatTree(hosts=3)
+
+        sft = topolib.StaticPerfectFatTree(hosts=8)
+
+        self.assertEqual(sft._get_lca("s1", "s2"), "s9")
+        self.assertEqual(sft._get_lca("s1", "s4"), "s13")
+        self.assertEqual(sft._get_lca("s1", "s5"), "s15")
+        self.assertEqual(sft.get_node_dist("h1", "h2"), 2)
+        self.assertEqual(sft.get_node_dist("h1", "h4"), 4)
+        self.assertEqual(sft.get_node_dist("h1", "h5"), 6)
+
+        sft = topolib.StaticPerfectFatTree(hosts=2)
         self.assertEqual(sft.hosts(), ['h1', 'h2'])
 
-    def test_haeccube_fix(self):
+    def test_haeccub(self):
         haec_cube = topolib.HAECCube(2, 2,
                                      intra_board_topo="mesh")
         # Check if there are duplicated links

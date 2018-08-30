@@ -12,6 +12,8 @@ MARK:
 """
 
 import json
+import math
+from os.path import commonprefix
 from random import randint
 
 from haecemu import log, util
@@ -32,6 +34,10 @@ _DPID_LEN = 16
 _DPID_FMT = '%0{0}x'.format(_DPID_LEN)
 DPID_PATTERN = r'[0-9a-f]{%d}' % _DPID_LEN
 
+##############################
+#  Helper Classes and Funcs  #
+##############################
+
 
 def dpid_to_str(dpid):
     return _DPID_FMT % dpid
@@ -51,12 +57,48 @@ def make_mac(idx):
         rand_byte() + ":00:00:" + hex(idx)[2:]
 
 
-class HostWorker(object):
+class TopolibError(Exception):
+    pass
 
-    def __init__(self, name, cost):
-        self._name = name
-        self._cost = cost
 
+class _BTNode(object):
+    """An individual node in a binary tree"""
+
+    def __init__(self, data):
+        self.data = data
+        self.left = None
+        self.right = None
+
+
+class _BinaryTree(object):
+
+    """Helper class for binary tree"""
+
+    def __init__(self):
+        pass
+
+    def build(self, nodes, in_order=None, pre_order=None, post_order=None):
+        """Build binary tree with given nodes and traversals"""
+
+        if in_order and pre_order:
+            pass
+
+        elif pre_order and post_order:
+            logger.warn("This only support for full binary tree")
+
+        else:
+            raise TopolibError("Invalid traversals for building a binary tree")
+
+    def get_lca(self, n1, n2):
+        pass
+
+    def get_dist(self):
+        pass
+
+
+###################
+#  Base Topology  #
+###################
 
 class BaseTopo(Topo):
 
@@ -67,7 +109,7 @@ class BaseTopo(Topo):
         if host_type not in HOST_TYPES:
             logger.error("Invalid host type, support host types {}".format(
                 ", ".join(HOST_TYPES)))
-            raise RuntimeError
+            raise TopolibError
         self.host_type = host_type
         self._host_kargs = {}
         if host_type == "docker":
@@ -94,7 +136,7 @@ class BaseTopo(Topo):
 
     def _update_dpid_table(self, dpid, sname):
         if dpid in self.dpid_table:
-            raise RuntimeError("Duplicated DPIDs")
+            raise TopolibError("Duplicated DPIDs")
         self.dpid_table[dpid] = sname
 
     def addLinkNamedIfce(self, src, dst, *args, **kwargs):
@@ -129,58 +171,57 @@ class BaseTopo(Topo):
         json.dumps([])
 
 
-class SingleParentTree(BaseTopo):
-    """SingleParentTree
-
-    Mainly used for checking the connectivity of active MaxiNet workers
-    """
-
-    ctl_prog = "ryu_l2_switch.py"
-
-    def __init__(self, hosts, bw=10, lat=0.1, *args, **kwargs):
-        self._hosts = hosts
-        self._bw = bw
-        self._lat = lat
-        super(SingleParentTree, self).__init__(*args, **kwargs)
-        logger.info("[TOPO] SingleParentTree is built")
-
-    def _make_dpid(self, sname):
-        pass
-
-    def build(self):
-        pass
-
-    def get_node_dist(self, src, dst):
-        pass
-
-    def get_link_energy_cost(self, src, dst):
-        pass
+###################
+#  Tree Topology  #
+###################
 
 
-class SimpleFatTree(BaseTopo):
+class StaticPerfectFatTree(BaseTopo):
+    """StaticPerfectFatTree"""
 
     # TODO: Use STP instead of learning switch
     ctl_prog = "ryu_l2_switch.py"
 
     def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
         """Simple fat tree topo with same link latency and bandwidth"""
+        if not math.log(hosts, 2).is_integer():
+            raise TopolibError(
+                "StaticPerfectFatTree supports only perfect tree.")
         self._hosts = hosts
+        self._depth = int(math.log(hosts, 2))
+        self._b_fmt = "{0:0%sb}" % (self._depth + 1)
+
         self._bwlimit = bwlimit
         self._lat = lat
-        super(SimpleFatTree, self).__init__(*args, **kwargs)
-        logger.info("[TOPO] SimpleFatTree is built.")
+
+        # Construct the helper binary tree
+        # self._nodes_num = sum([2 ** l for l in range(self._depth + 1)])
+
+        # self._pre_order = []
+        # self._pre_order = ["s{}".format(x) for x in self._pre_order]
+
+        # self._in_order = []
+        # self._post_order = []
+        # self._hlp_tree = _BinaryTree()
+
+        super(StaticPerfectFatTree, self).__init__(*args, **kwargs)
+        logger.info("[TOPO] StaticPerfectFatTree is built.")
 
     def _make_dpid(self, sname, idx):
         if idx > 250 or idx < 0:
-            raise RuntimeError("Invalid switch index.")
+            raise TopolibError("Invalid switch index.")
         dpid = "".join(("0" * (_DPID_LEN - len(str(idx))), str(idx)))
         self._update_dpid_table(dpid, sname)
         return dpid
+
+    def get_depth(self):
+        return self._depth
 
     def build(self):
         tor = []
         bw = self._bwlimit
         s = 1
+
         for i in range(self._hosts):
             h = self.addHost(
                 'h' + str(i + 1), mac=make_mac(i),
@@ -192,10 +233,13 @@ class SimpleFatTree(BaseTopo):
             s = s + 1
             self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
             tor.append(sw)
+
         toDo = tor  # nodes that have to be integrated into the tree
+
+        # Add aggregation switches
         while len(toDo) > 1:
             newToDo = []
-            for i in range(0, len(toDo), 2):
+            for i in range(0, len(toDo), 2):  # binary tree
                 sw = self.addSwitch("s" + str(s),
                                     dpid=self._make_dpid("s"+str(s), s),
                                     **dict(listenPort=(13000 + s - 1)))
@@ -209,11 +253,38 @@ class SimpleFatTree(BaseTopo):
             toDo = newToDo
             bw = 2.0 * bw
 
+    def _get_lca(self, src, dst):
+        """MARK: Temp solution"""
+        level_base = [14, 12, 8, 0]
+        src_b = self._b_fmt.format(int(src[1:]) - 1)
+        dst_b = self._b_fmt.format(int(dst[1:]) - 1)
+        prefix = commonprefix((src_b, dst_b))
+        lca = int(prefix, 2) + level_base[len(prefix) - 1] + 1
+        return "{}{}".format(src[0], lca)
+
     def get_node_dist(self, src, dst):
-        pass
+        """
+        Dist(n1, n2) = Dist(root, n1) + Dist(root, n2) - 2 * Dist(root, lca)
+        MARK: Currently only support tor switches
+        """
+        lca = self._get_lca(src, dst)
+        lca_b = self._b_fmt.format(int(lca[1:]) - 1)
+        t = 0
+        for c in lca_b:
+            if c == "1":
+                t += 1
+            else:
+                break
+        dist = 2 * self._depth - 2*(self._depth - t)
+        return dist
 
     def get_link_energy_cost(self, src, dst):
-        pass
+        dist = self.get_node_dist(src, dst)
+        return dist * 5
+
+#######################
+#  Hypecube Topology  #
+#######################
 
 
 class HAECCube(BaseTopo):
@@ -286,7 +357,7 @@ class HAECCube(BaseTopo):
 
         if topo not in self.INTRA_BOARD_TOPOS:
             logger.error("[HAECCube] Unknown topology to build a single board.")
-            raise RuntimeError
+            raise TopolibError
         logger.info(
             "[HAECCube] Topology used for intra-board connection: {}".format(topo))
 
@@ -362,7 +433,7 @@ class HAECCube(BaseTopo):
 
     def connect_boards(self, boards, mode="1to1"):
         if len(boards) == 1:
-            raise RuntimeError("Invalid board number.")
+            raise TopolibError("Invalid board number.")
         logger.info("Connect boards with mode: %s", mode)
         boards = list(map(sorted, boards))
         for b_idx in range(0, len(boards) - 1):
@@ -381,7 +452,7 @@ class HAECCube(BaseTopo):
         if self._intra_board_topo == "mesh":
             return [abs(int(c1) - int(c2)) for c1, c2 in zip(src[1:4], dst[1:4])]
         else:
-            raise RuntimeError("Not implemented yet")
+            raise TopolibError("Not implemented yet")
 
     def get_link_energy_cost(self, src, dst):
         """Get the link enery cost between src and dst"""
