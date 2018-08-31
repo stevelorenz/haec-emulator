@@ -22,9 +22,9 @@ errcheck: $(PYSRC)
 	@echo "# Running check for errors only"
 	pyflakes $(PYSRC)
 
-errcheck-all: $(PYSRC) $(TEST)
+errcheck-all: $(PYSRC) $(TEST) $(EXAMPLES)
 	@echo "# Running check for errors only"
-	pyflakes $(PYSRC) $(TEST)
+	pyflakes $(PYSRC) $(TEST) $(EXAMPLES)
 
 errcheck-lint: $(PYSRC)
 	@echo "# Running check for errors only"

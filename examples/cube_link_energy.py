@@ -8,10 +8,10 @@ About: Show the energy per byte before and after the server migration
 """
 
 import json
-import time
 import random
+import time
 
-from haecemu.emulator import Emulator
+from haecemu.emulator import Emulator, ExpInfo
 from haecemu.topolib import HAECCube
 
 # Use httpbin just for test HTTP requests
@@ -27,8 +27,10 @@ try:
         intra_board_topo="mesh",
         link_energy_cost=(5.0, 5.0, 20.0)
     )
+    exp_info = ExpInfo("hace_cube_link_energy", None,
+                       topo, "process", None, None)
 
-    exp = emu.setup(topo, run_ctl=True)
+    emu.run_exp(exp_info)
 
     migrate_period = 5  # second
 
@@ -74,4 +76,5 @@ try:
     emu.wait()
 
 finally:
+    emu.stop_cur_exp()
     emu.cleanup()

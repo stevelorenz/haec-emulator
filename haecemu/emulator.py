@@ -14,6 +14,7 @@ import shlex
 import subprocess
 import threading
 import time
+from collections import namedtuple
 from os import path
 from urlparse import urljoin
 
@@ -35,10 +36,16 @@ POWER_OUTPUT = u"192.168.0.103:\nP:\t5.34213W\nU:\t4.95125V\nA:\t1.07983A\n\n"
 EMU_MODES = ("emu", "test")
 
 
+# Essential information for one experiment
+ExpInfo = namedtuple("ExpInfo",
+                     ["name", "cluster", "topo", "host_type",
+                      "ctl_prog", "placement"])
+
+
 class Emulator(object):
     """HAEC Emulator
 
-    Run multiple MaxiNet experiments
+    TODO: Add doc
     """
 
     # URLs to the GUI frontend
@@ -58,14 +65,16 @@ class Emulator(object):
             logger.error("Invalid emulator mode.")
             self.cleanup()
         self._mode = mode
-
-        self._host_type = None
-        self._ctl_prog = None
         # A cluster can run one Experiment at a time. Several experiment can be
         # run sequentially without destroy/recreating the cluster class
-        self._cluster = None
-        self._exp = None
-        self._topo = None
+        self._default_cluster = maxinet.Cluster()
+
+        # Current running
+        self._cur_cluster = None
+        self._cur_exp = None
+        self._cur_topo = None
+
+        self._exp_q = list()  # A queue of experiments.
 
         logger.debug("API URLs: {}".format(
             ",".join([self._url_create_flow,
@@ -143,13 +152,13 @@ class Emulator(object):
         if self._mode == "test":
             random.seed(time.time())
             return (random.random() * 100)
-        workload = self._exp.get_node(host_id).cmd(
+        workload = self._cur_exp.get_node(host_id).cmd(
             "echo $[100-$(vmstat 1 2|tail -1|awk '{print $15}')]")
         workload = int(workload.strip())
         return workload
 
     def _query_power(self, host_id):
-        worker_ip = self._exp.get_worker(host_id).ip()
+        worker_ip = self._cur_exp.get_worker(host_id).ip()
         cmd = "ina231_TCP -sample -host {}".format(worker_ip)
         if self._mode == "test":
             out = POWER_OUTPUT
@@ -163,7 +172,7 @@ class Emulator(object):
         if self._mode == "test":
             temp = 30
         else:
-            temp = self._exp.get_node(host_id).cmd(
+            temp = self._cur_exp.get_node(host_id).cmd(
                 "cat /sys/devices/virtual/thermal/thermal_zone0/temp").strip()
             temp = int(float(temp) / 1000.0)
         return temp
@@ -171,7 +180,7 @@ class Emulator(object):
     def _check_dps_conn(self, num_trys=3, wait=10, restart=False):
         """Check connection of all datapaths (switches) in the topology"""
 
-        topo_dps = self._topo.dpid_table.keys()
+        topo_dps = self._cur_topo.dpid_table.keys()
 
         t = 0
         while t < num_trys:
@@ -198,7 +207,7 @@ class Emulator(object):
     def _restart_dps(self, dps):
         """Restart un-connected datapaths"""
         for dp in dps:
-            wk = self._exp.get_worker(self._topo.dpid_table[dp])
+            wk = self._cur_exp.get_worker(self._cur_topo.dpid_table[dp])
             # MARK: Restart the OVS service to let the Datapath to send hello
             # event again. Events logs can be found ~/.haecemu/log/ryu.log. (Log
             # level should be set to DEBUG in the ryu_log.ini)
@@ -211,10 +220,10 @@ class Emulator(object):
         :param placement (str): Placement algorithm
         """
         mapping = {}
-        wk_num = len(self._cluster.worker)
-        hosts = self._topo.hosts()
+        wk_num = len(self._cur_cluster.worker)
+        hosts = self._cur_topo.hosts()
         if placement == "round_robin":
-            for idx, node in enumerate(self._topo.switches()):
+            for idx, node in enumerate(self._cur_topo.switches()):
                 # Check if each host has a directly-connected switch
                 # https://github.com/MaxiNet/MaxiNet/wiki/Docker-Containers
                 for h in hosts:
@@ -231,16 +240,16 @@ class Emulator(object):
             "[PRE_EXP_SETUP] Run mininet cleanup on frontend and all workers")
 
         subprocess.check_call(shlex.split("sudo mn -c"))
-        for wk in self._cluster.worker:
+        for wk in self._cur_cluster.worker:
             wk.run_cmd("sudo mn -c")
 
     def _post_cleanup(self):
-        self._cluster.remove_all_tunnels()
+        self._cur_cluster.remove_all_tunnels()
 
         logger.info(
             "[POST_CLEANUP] Remove all veth pairs and gre tunnels"
         )
-        for wk in self._cluster.worker:
+        for wk in self._cur_cluster.worker:
             veth_entrys = wk.run_cmd(
                 "sudo ip -o link show type veth").splitlines()
             peers = list()
@@ -260,65 +269,66 @@ class Emulator(object):
                     wk.run_cmd("sudo ip link delete {}".format(gre))
                     wk.run_cmd("sudo ip link delete {}tap".format(gre))
 
-    def setup(self, topo, run_ctl=True,
-              local_test=False,
-              dp_wait=30, placement="round_robin",
-              switch=OVSSwitch):
-        """Setup an emulation experiment
+    def setup(self):
+        pass
 
-        :param placement: Placement algorithm
-        :param topo: To be emulated network topology
-        :param switch:
-        """
-        self._topo = topo
-        self._host_type = topo.host_type
-        self._run_ctl = run_ctl
-        if self._run_ctl:
-            self._run_controller(topo)
-        self._local_test = local_test
-
-        if self._local_test:
-            logger.info("[SETUP] Run local test")
-            pass
+    def run_exp(self, exp_info):
+        if not exp_info.cluster:
+            self._cur_cluster = self._default_cluster
         else:
-            self._cluster = maxinet.Cluster()
-            try:
-                self._exp = maxinet.Experiment(
-                    self._cluster, topo, switch=switch,
-                    nodemapping=self._get_placement_mapping(placement)
-                )
-                logger.info(
-                    "[SETUP] Setup MaxiNet experiment, placement algorithm: %s",
-                    placement
-                )
-                self._pre_exp_setup()
-                self._exp.setup()
-            except Exception as e:
-                logger.error(e)
-                self.cleanup()
+            self._cur_cluster = exp_info.cluster
 
-            self._check_dps_conn(wait=dp_wait)
+        self._cur_topo = exp_info.topo
+        exp_obj = self._setup_exp(exp_info)
+        self._cur_exp = exp_obj
+        return exp_obj
 
-            return self._exp
+    def stop_cur_exp(self):
+        self._cleanup_cur_exp()
+
+    def _setup_exp(self, exp_info):
+        self._run_controller(exp_info.topo)
+        if not exp_info.placement:
+            placement = "round_robin"
+        else:
+            placement = exp_info.placement
+
+        try:
+            cur_exp = maxinet.Experiment(
+                self._cur_cluster, exp_info.topo, switch=OVSSwitch,
+                nodemapping=self._get_placement_mapping(placement)
+            )
+            self._pre_exp_setup()
+            cur_exp.setup()
+        except Exception as e:
+            logger.error(e)
+            self._cleanup_cur_exp()
+
+        self._check_dps_conn(wait=30)
+
+        return cur_exp
 
     def cleanup(self):
+        # Terminate all worker processes
+        logger.info("Terminate all active children processes.")
+        for proc in multiprocessing.active_children():
+            proc.terminate()
+            time.sleep(1)
+
+    def _cleanup_cur_exp(self):
         """Cleanup an emulation experiment"""
         try:
-            if self._exp:
-                self._exp.stop()
-            if self._run_ctl:
-                self._stop_controller()
+            if self._cur_exp:
+                self._cur_exp.stop()
+            self._stop_controller()
             self._post_cleanup()
 
         except Exception as e:
             logger.error(e)
+            self.cleanup()
 
-        finally:
-            # Terminate all worker processes
-            logger.info("Terminate all active children processes.")
-            for proc in multiprocessing.active_children():
-                proc.terminate()
-                time.sleep(1)
+    # TODO: Move fowllowing methods to a subclass or wrapper class of
+    # maxinet.Experiment
 
     def push_flow(self, flow_md):
         """Put a new flow via HTTP put to frontend
@@ -344,20 +354,20 @@ class Emulator(object):
         logger.debug("Status code: {}, text: {}".format(r.status_code, r.text))
 
     def run_task_bg(self, host_id, cmd, out=None):
-        node = self._exp.get_node(host_id)
+        node = self._cur_exp.get_node(host_id)
         if out:
             node.cmd("{} > {} 2>&1 &".format(out, cmd))
         else:
             node.cmd("{} > /dev/null 2>&1 &".format(cmd))
 
     def stop_task_bg(self, host_id, cmd):
-        node = self._exp.get_node(host_id)
+        node = self._cur_exp.get_node(host_id)
         node.cmd("sudo killall {}".format(cmd))
 
     def _monitor_processor(self, cycle=3):
         """Run monitoring for flows and processors"""
         while True:
-            for host_id in self._topo.hosts():
+            for host_id in self._cur_topo.hosts():
                 self.push_processor(host_id)
             time.sleep(3)
 
@@ -380,7 +390,7 @@ class Emulator(object):
             logger.info("The host type is not docker")
             return
         print("------ Docker status of all active workers ------")
-        for wk in self._cluster.workers():
+        for wk in self._cur_cluster.workers():
             print("Worker IP: {}".format(wk.ip()))
             ret = wk.run_cmd("sudo docker container ls")
             print(ret)
@@ -390,8 +400,8 @@ class Emulator(object):
     def ping_all(self):
         sent = 0.0
         received = 0.0
-        for host in self._exp.hosts:
-            for target in self._exp.hosts:
+        for host in self._cur_exp.hosts:
+            for target in self._cur_exp.hosts:
                 if(target == host):
                     continue
                 logger.info("{} -> {}".format(host.name, target.name))
@@ -407,14 +417,14 @@ class Emulator(object):
         )
 
     def print_host_ips(self):
-        for h in self._exp.hosts:
+        for h in self._cur_exp.hosts:
             ret = h.cmd("ip -o addr show")
             print("Host: {}".format(h.name))
             print(ret)
 
     def cli(self):
         """Open MaxiNet CLI"""
-        self._exp.CLI(locals(), globals())
+        self._cur_exp.CLI(locals(), globals())
 
     # --- Dev for Service Migration ---
 
@@ -425,9 +435,9 @@ class Emulator(object):
         (swapped). After changing IP, the ARP cache is cleared to update mac
         table of the SDN controller
         """
-        h2ifce = self._topo.host_ifce_table
-        h1_nw = self._exp.get_node(h1)
-        h2_nw = self._exp.get_node(h2)
+        h2ifce = self._cur_topo.host_ifce_table
+        h1_nw = self._cur_exp.get_node(h1)
+        h2_nw = self._cur_exp.get_node(h2)
         h1_ip = h1_nw.IP(intf=h2ifce[h1_nw.name])
         h2_ip = h2_nw.IP(intf=h2ifce[h2_nw.name])
 
@@ -447,16 +457,16 @@ class Emulator(object):
     def migrate_server(self, clt, h_prev, h_cur, proc_cmd):
         self.swap_ip(h_prev, h_cur)
         # Client refresh ARP table
-        clt_nw = self._exp.get_node(clt)
+        clt_nw = self._cur_exp.get_node(clt)
         clt_nw.cmd("ip -s -s neigh flush all")
 
-        nw = self._exp.get_node(h_prev)
+        nw = self._cur_exp.get_node(h_prev)
         nw.cmd("sudo killall {}".format(proc_cmd))
-        nw = self._exp.get_node(h_cur)
+        nw = self._cur_exp.get_node(h_cur)
         nw.cmd("{}".format(proc_cmd))
 
     def _get_host_bw(self, h, h2ifce, bw):
-        h_nw = self._exp.get_node(h)
+        h_nw = self._cur_exp.get_node(h)
         rx_cmd = "cat /sys/class/net/{}/statistics/rx_bytes".format(h2ifce[h])
         tx_cmd = "cat /sys/class/net/{}/statistics/tx_bytes".format(h2ifce[h])
         rx_prev = int(h_nw.cmd(rx_cmd).strip())
@@ -470,7 +480,7 @@ class Emulator(object):
     def get_hosts_bw(self, hosts):
         """Monitor bandwidth of hosts"""
         bw = {}
-        h2ifce = self._topo.host_ifce_table
+        h2ifce = self._cur_topo.host_ifce_table
         ths = [threading.Thread(target=self._get_host_bw,
                                 args=(h, h2ifce, bw)) for h in hosts]
         for th in ths:
@@ -488,13 +498,13 @@ class Emulator(object):
 
     def swap_ips_random(self, num=3):
         for n in range(num):
-            h1, h2 = random.sample(self._topo.hosts(), 2)
+            h1, h2 = random.sample(self._cur_topo.hosts(), 2)
             logger.debug("Round: %s, h1: %s, h2 %s", n, h1, h2)
             self.swap_ip(h1, h2)
 
     def run_iperf_daemon(self, hosts):
         for h in hosts:
-            h_nw = self._exp.get_node(h)
+            h_nw = self._cur_exp.get_node(h)
             self.run_task_bg(h, "iperf3 -s {} -D".format(h_nw.IP()))
 
     def kill_iperf_daemon(self, hosts):
@@ -502,7 +512,7 @@ class Emulator(object):
             self.run_task_bg(h, "killall iperf3")
 
     def run_iperf_udp(self, src, dst, dur=30):
-        dst_nw = self._exp.get_node(dst)
+        dst_nw = self._cur_exp.get_node(dst)
         self.run_task_bg(
             src, "iperf3 -c {} -u -t {}".format(dst_nw.IP(), dur)
         )

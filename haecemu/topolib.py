@@ -233,7 +233,8 @@ class StaticPerfectFatTree(BaseTopo):
             sw = self.addSwitch("s" + str(s), dpid=self._make_dpid("s"+str(s), s),
                                 **dict(listenPort=(13000 + s - 1)))
             s = s + 1
-            self.addLink(h, sw, bw=bw, delay=str(self._lat) + "ms")
+            self.addLinkNamedIfce(h, sw, bw=bw, delay=str(self._lat) + "ms")
+            self.host_ifce_table[h] = "{}-{}".format(h, sw)
             tor.append(sw)
 
         toDo = tor  # nodes that have to be integrated into the tree
@@ -247,11 +248,11 @@ class StaticPerfectFatTree(BaseTopo):
                                     **dict(listenPort=(13000 + s - 1)))
                 s = s + 1
                 newToDo.append(sw)
-                self.addLink(toDo[i], sw, bw=bw,
-                             delay=str(self._lat) + "ms")
+                self.addLinkNamedIfce(toDo[i], sw, bw=bw,
+                                      delay=str(self._lat) + "ms")
                 if len(toDo) > (i + 1):
-                    self.addLink(toDo[i + 1], sw, bw=bw,
-                                 delay=str(self._lat) + "ms")
+                    self.addLinkNamedIfce(toDo[i + 1], sw, bw=bw,
+                                          delay=str(self._lat) + "ms")
             toDo = newToDo
             bw = 2.0 * bw
 
