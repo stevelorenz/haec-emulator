@@ -233,7 +233,9 @@ def setup_mxn_worker():
             )
         if not files.exists('~/containernet'):
             sudo("apt-get update")
-            sudo("apt-get install -y git")
+            sudo("dpkg --configure -a")
+            sleep(3)
+            sudo("apt-get install -y git ansible bash-completion")
             cmd = []
             cmd.append(
                 "git clone https://github.com/containernet/containernet.git ~/containernet"
@@ -257,8 +259,7 @@ def setup_mxn_worker():
             put("./install_maxinet.sh", "~/install_maxinet.sh")
             run("bash ~/install_maxinet.sh -nn")
         else:
-            print("MaxiNet is already installed. Output of MaxiNet worker")
-            print(sudo("MaxiNetWorker"))
+            print("MaxiNet is already installed.")
 
 
 @task
@@ -293,3 +294,17 @@ def check_mxn_status():
 @task
 def cleanup_emulator():
     pass
+
+@task
+def put_mxn_worker_service():
+    with settings(hide('warnings', 'running', 'stdout')):
+        put("./add_maxinet_systemdunit.sh", "~/add_maxinet_systemdunit.sh")
+        run("bash ~/add_maxinet_systemdunit.sh worker odroid")
+        run("rm ~/add_maxinet_systemdunit.sh")
+
+@task
+def enable_mxn_worker_service():
+    with settings(hide('warnings', 'running', 'stdout')):
+	run("sudo systemctl start maxinet-worker.service")
+	run("sudo systemctl enable maxinet-worker.service")
+	run("sudo systemctl status maxinet-worker.service")

@@ -38,7 +38,7 @@ Description=MaxiNet Frontend Server
 
 [Service]
 Type=simple
-User=vagrant
+User=$2
 ExecStart=/usr/local/bin/MaxiNetFrontendServer
 Restart=always
 RestartSec=3
@@ -65,7 +65,7 @@ Description=MaxiNet Worker Server
 
 [Service]
 Type=simple
-User=vagrant
+User=$2
 ExecStart=/usr/bin/sudo /usr/local/bin/MaxiNetWorker
 Restart=always
 RestartSec=3
