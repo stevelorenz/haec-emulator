@@ -20,28 +20,11 @@ emu._url_push_processor_info = "put"
 
 # Run Fattree
 try:
-    tree = StaticPerfectFatTree(host_type="process", hosts=4)
+    tree = StaticPerfectFatTree(host_type="process", hosts=32)
     exp = emu.setup(tree, run_ctl=True)
     emu.cli()
 
 finally:
     emu.cleanup()
 
-time.sleep(10)
-
-# Run HAECCube
-try:
-    cube = HAECCube(
-        host_type="process", board_len=3,
-        intra_board_topo="mesh",
-        link_energy_cost=(5.0, 5.0, 20.0)
-    )
-    exp = emu.setup(cube, run_ctl=True)
-    emu.cli()
-    emu.wait()
-
-finally:
-    emu.cleanup()
-
-
-# Compare the energy per bytes
+time.sleep(3)

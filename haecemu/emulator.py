@@ -61,6 +61,8 @@ class Emulator(object):
 
         self._host_type = None
         self._ctl_prog = None
+        # A cluster can run one Experiment at a time. Several experiment can be
+        # run sequentially without destroy/recreating the cluster class
         self._cluster = None
         self._exp = None
         self._topo = None
@@ -309,7 +311,7 @@ class Emulator(object):
             self._post_cleanup()
 
         except Exception as e:
-            logger.info(e)
+            logger.error(e)
 
         finally:
             # Terminate all worker processes

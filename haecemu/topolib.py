@@ -182,7 +182,8 @@ class StaticPerfectFatTree(BaseTopo):
     # TODO: Use STP instead of learning switch
     ctl_prog = "ryu_l2_switch.py"
 
-    def __init__(self, hosts, bwlimit=10, lat=0.1, *args, **kwargs):
+    def __init__(self, hosts, bwlimit=10, lat=0.1, link_energy_cost=5,
+                 *args, **kwargs):
         """Simple fat tree topo with same link latency and bandwidth"""
         if not math.log(hosts, 2).is_integer():
             raise TopolibError(
@@ -193,6 +194,7 @@ class StaticPerfectFatTree(BaseTopo):
 
         self._bwlimit = bwlimit
         self._lat = lat
+        self._link_energy_cost = link_energy_cost
 
         # Construct the helper binary tree
         # self._nodes_num = sum([2 ** l for l in range(self._depth + 1)])
@@ -255,7 +257,13 @@ class StaticPerfectFatTree(BaseTopo):
 
     def _get_lca(self, src, dst):
         """MARK: Temp solution"""
-        level_base = [14, 12, 8, 0]
+        cur = 0
+        level_base = [0]
+        for i in range(self._depth, 0, -1):
+            cur = cur + 2**i
+            level_base.append(cur)
+        level_base = level_base[::-1]
+
         src_b = self._b_fmt.format(int(src[1:]) - 1)
         dst_b = self._b_fmt.format(int(dst[1:]) - 1)
         prefix = commonprefix((src_b, dst_b))
@@ -280,7 +288,7 @@ class StaticPerfectFatTree(BaseTopo):
 
     def get_link_energy_cost(self, src, dst):
         dist = self.get_node_dist(src, dst)
-        return dist * 5
+        return dist * self._link_energy_cost
 
 #######################
 #  Hypecube Topology  #
