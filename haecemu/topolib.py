@@ -464,11 +464,21 @@ class HAECCube(BaseTopo):
             raise TopolibError("Not implemented yet")
 
     def get_link_energy_cost(self, src, dst):
-        """Get the link enery cost between src and dst"""
+        """Get the link energy cost between src and dst"""
         dists = self.get_node_dist(src, dst)
         return sum([d*c for d, c in zip(dists, self.link_energy_cost)])
 
-    # TODO: Should be implemented in the SDN controller -> link enery depends
+    # MARK: Helper functions to cooperate with the Unity frontend
+    def get_proc_id(self, sname):
+        """Get the processor ID based on switch name"""
+        proc_id = 0
+        for idx, val in enumerate(sname[1:]):
+            proc_id = proc_id + (int(val) - 1) * (self._board_len ** idx)
+        proc_id = proc_id + 1
+
+        return proc_id
+
+    # TODO: Should be implemented in the SDN controller -> link energy depends
     # on the traffic state. Also migrate should support overlapping
     # --------------------------------------------------------------------------
 
