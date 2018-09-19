@@ -48,12 +48,20 @@ def post_path(sender, receiver, path):
     # print("POST path: \n" + json.dumps(data))
 
 
-def post_state_global(consumption, max_temp):
+def post_state_global(consumption, max_temp, proc_info_list=None):
     data = {
         "consumption": str(consumption),
         "maxTemperature": str(max_temp),
         "cpu": []
     }
+
+    if proc_info_list:
+        added_proc_list = [ x["id"] for x in proc_info_list ]
+        for idx in range(1, 28):
+            if idx not in added_proc_list:
+                proc_info_list.append({"id": idx, "load": 0, "temperature":50})
+        data["cpu"] = proc_info_list
+
     for _ in range(POST_PER_SECOND):
         requests.post(
             FRONTEND_URL + '/state/update',
@@ -62,24 +70,11 @@ def post_state_global(consumption, max_temp):
         )
     # print("POST global state: \n" + json.dumps(data))
 
-
-def post_state_one_proc(proc_id, load, temp):
-    data = {
-        "id": str(proc_id),
-        "load": str(load),
-        "temperature": str(temp)
-    }
-    requests.post(
-        FRONTEND_URL + '/state/update',
-        headers={"Content-type": "application/x-www-form-urlencoded"},
-        data=json.dumps(data)
-    )
-    print("POST state one proc: \n" + json.dumps(data))
-
-
 def distributed_mode(topo, emu):
     print("### Start distributed mode")
     global last_valid_bw_distributed
+    proc_info_list = list()
+
     random.seed(time.time())
     clt = "h{}{}1".format(random.randint(1, 3), random.randint(1, 3))
     srv_init = "h{}{}3".format(random.randint(1, 3), random.randint(1, 3))
@@ -94,6 +89,9 @@ def distributed_mode(topo, emu):
         topo.get_proc_id(clt), topo.get_proc_id(srv_init),
         path
     )
+
+    for proc in path:
+        proc_info_list.append({"id": proc, "load": 100, "temperature":50})
 
     srv_cmd = "iperf3 -s {} -D".format(srv_ip)
     clt_cmd = "iperf3 -c {} -u -t 60".format(srv_ip)
@@ -112,9 +110,9 @@ def distributed_mode(topo, emu):
         )
         w_per_bit = (energy / bw) * 1000.0
         print("Energy per byte: {} mW/byte".format(w_per_bit))
-	w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_DISTRIBUTED
-	w_per_bit = min(w_per_bit, 10)
-        post_state_global(w_per_bit, random.randint(50, 55))
+        w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_DISTRIBUTED
+        w_per_bit = min(w_per_bit, 10)
+        post_state_global(w_per_bit, random.randint(50, 55), proc_info_list)
         time.sleep(1)
 
     return clt, srv_init, srv_ip
@@ -123,6 +121,7 @@ def distributed_mode(topo, emu):
 def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
     print("### Start centralized mode")
     global last_valid_bw_central
+
     hops = topo.get_migrate_dst_hops(clt, srv_init)
     print("### Selected migration hops: {}".format(json.dumps(hops)))
 
@@ -151,6 +150,10 @@ def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
             path
         )
 
+        proc_info_list = list()
+        for proc in path:
+            proc_info_list.append({"id": proc, "load": 100, "temperature":50})
+
         for i in range(MIGRATE_PERIOD):
             bw = sum(emu.get_hosts_bw([clt])[clt])
             if bw == 0:
@@ -163,9 +166,9 @@ def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
             )
             w_per_bit = (energy / bw) * 1000.0
             print("Energy per byte: {} mW/byte".format(w_per_bit))
-	    w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_CENTRAL
+            w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_CENTRAL
             w_per_bit = min(w_per_bit, 10)
-            post_state_global(w_per_bit, random.randint(50, 55))
+            post_state_global(w_per_bit, random.randint(50, 55), proc_info_list)
             time.sleep(1)
 
 
@@ -174,7 +177,7 @@ if __name__ == '__main__':
     loop_mode = True
 
     try:
-        emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
+        emu = Emulator(mode="emu", remote_base_url="http://httpbin.org")
         emu._url_create_flow = "put"
         emu._url_push_processor_info = "put"
         topo = HAECCube(
