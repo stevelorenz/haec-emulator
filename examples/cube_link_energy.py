@@ -24,7 +24,7 @@ BACKEND_URL = "http://192.168.0.102:8080"
 BACKEND_IP = "192.168.0.102"
 DEFAULT_MODE = "distributed"
 
-MIGRATE_PERIOD = 5  # second
+MIGRATE_PERIOD = 2  # second
 POST_PER_SECOND = 3
 
 ENERGY_SCALE_FACTOR_CENTRAL = 1000
@@ -76,8 +76,11 @@ def distributed_mode(topo, emu):
     proc_info_list = list()
 
     random.seed(time.time())
-    clt = "h{}{}1".format(random.randint(1, 3), random.randint(1, 3))
-    srv_init = "h{}{}3".format(random.randint(1, 3), random.randint(1, 3))
+    clt_board, srv_board = random.sample([1, 3], 2)
+    clt_x, srv_x = random.sample([1, 3], 2)
+    clt_y, srv_y = random.sample([1, 3], 2)
+    clt = "h{}{}{}".format(clt_x, clt_y, clt_board)
+    srv_init = "h{}{}{}".format(srv_x, srv_y, srv_board)
     srv_ip = "10.{}.{}.{}".format(srv_init[1], srv_init[2], srv_init[3])
 
     print("### Distributed mode: client: {}, server: {}".format(clt, srv_init))
@@ -121,6 +124,7 @@ def distributed_mode(topo, emu):
 def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
     print("### Start centralized mode")
     global last_valid_bw_central
+    last_valid_bw_central = last_valid_bw_distributed
 
     hops = topo.get_migrate_dst_hops(clt, srv_init)
     print("### Selected migration hops: {}".format(json.dumps(hops)))
@@ -183,7 +187,7 @@ if __name__ == '__main__':
         topo = HAECCube(
             host_type="process", board_len=3,
             intra_board_topo="mesh",
-            link_energy_cost=(15.0, 15.0, 150)
+            link_energy_cost=(15.0, 15.0, 60)
         )
         exp_info = ExpInfo("hace_cube_link_energy", None,
                            topo, "process", None, None)
@@ -194,9 +198,9 @@ if __name__ == '__main__':
             print("# Run with loop mode")
             while True:
                 clt, srv_init, srv_init_ip = distributed_mode(topo, emu)
-                time.sleep(MIGRATE_PERIOD)
+                time.sleep(3)
                 centralized_mode(topo, emu, clt, srv_init, srv_init_ip)
-                time.sleep(MIGRATE_PERIOD)
+                time.sleep(3)
 
         else:
             print("# Run with interactive mode")
