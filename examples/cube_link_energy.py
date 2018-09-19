@@ -25,8 +25,10 @@ BACKEND_IP = "192.168.0.102"
 DEFAULT_MODE = "distributed"
 
 MIGRATE_PERIOD = 5  # second
-POST_PER_SECOND = 10
-MAX_ALLOWED_W_PER_BIT = 2
+POST_PER_SECOND = 3
+
+ENERGY_SCALE_FACTOR_CENTRAL = 1000
+ENERGY_SCALE_FACTOR_DISTRIBUTED = 1000
 
 last_valid_bw_central = 1
 last_valid_bw_distributed = 1
@@ -110,8 +112,9 @@ def distributed_mode(topo, emu):
         )
         w_per_bit = (energy / bw) * 1000.0
         print("Energy per byte: {} mW/byte".format(w_per_bit))
-        w_per_bit = min(w_per_bit, MAX_ALLOWED_W_PER_BIT)
-        post_state_global(w_per_bit * 10, random.randint(50, 55))
+	w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_DISTRIBUTED
+	w_per_bit = min(w_per_bit, 10)
+        post_state_global(w_per_bit, random.randint(50, 55))
         time.sleep(1)
 
     return clt, srv_init, srv_ip
@@ -160,8 +163,9 @@ def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
             )
             w_per_bit = (energy / bw) * 1000.0
             print("Energy per byte: {} mW/byte".format(w_per_bit))
-            w_per_bit = min(w_per_bit, MAX_ALLOWED_W_PER_BIT)
-            post_state_global(w_per_bit * 10, random.randint(50, 55))
+	    w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_CENTRAL
+            w_per_bit = min(w_per_bit, 10)
+            post_state_global(w_per_bit, random.randint(50, 55))
             time.sleep(1)
 
 
@@ -176,7 +180,7 @@ if __name__ == '__main__':
         topo = HAECCube(
             host_type="process", board_len=3,
             intra_board_topo="mesh",
-            link_energy_cost=(15.0, 15.0, 120.0)
+            link_energy_cost=(15.0, 15.0, 150)
         )
         exp_info = ExpInfo("hace_cube_link_energy", None,
                            topo, "process", None, None)

@@ -308,3 +308,8 @@ def enable_mxn_worker_service():
 	run("sudo systemctl start maxinet-worker.service")
 	run("sudo systemctl enable maxinet-worker.service")
 	run("sudo systemctl status maxinet-worker.service")
+
+@task
+def restart_worker_service():
+    with settings(hide('warnings', 'running', 'stdout')):
+	run("sudo systemctl restart maxinet-worker.service")
