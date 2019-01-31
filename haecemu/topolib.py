@@ -452,7 +452,7 @@ class HAECCube(BaseTopo):
     def build(self):
         boards = [
             self._build_one_board(idx, self._intra_board_topo)
-            for idx in range(0, 3)
+            for idx in range(0, self._board_num)
         ]
         self.connect_boards(boards)
 

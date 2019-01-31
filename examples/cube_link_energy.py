@@ -19,6 +19,11 @@ import requests
 from haecemu.emulator import Emulator, ExpInfo
 from haecemu.topolib import HAECCube
 
+CUBE_LEN = 4  # number of nodes = (CUBE_LEN) ** 3
+
+# MARK: Change NO_FRONDEND to False and change the FRONTEND_URL before running
+# the demo, NO_FRONDEND is used for debugging and local testing
+NO_FRONDEND = True
 FRONTEND_URL = "http://192.168.0.100:8080"
 BACKEND_URL = "http://192.168.0.102:8080"
 BACKEND_IP = "192.168.0.102"
@@ -33,8 +38,15 @@ ENERGY_SCALE_FACTOR_DISTRIBUTED = 1000
 last_valid_bw_central = 1
 last_valid_bw_distributed = 1
 
+idle_power_base = 1.5
+work_power_base = 7
+
 
 def post_path(sender, receiver, path):
+
+    if NO_FRONDEND:
+        return
+
     data = {
         "senderId": sender,
         "receiverId": receiver,
@@ -49,6 +61,10 @@ def post_path(sender, receiver, path):
 
 
 def post_state_global(consumption, max_temp, proc_info_list=None):
+
+    if NO_FRONDEND:
+        return
+
     data = {
         "consumption": str(consumption),
         "maxTemperature": str(max_temp),
@@ -76,9 +92,9 @@ def distributed_mode(topo, emu):
     proc_info_list = list()
 
     random.seed(time.time())
-    clt_board, srv_board = random.sample([1, 3], 2)
-    clt_x, srv_x = random.sample([1, 3], 2)
-    clt_y, srv_y = random.sample([1, 3], 2)
+    clt_board, srv_board = random.sample([1, CUBE_LEN], 2)
+    clt_x, srv_x = random.sample([1, CUBE_LEN], 2)
+    clt_y, srv_y = random.sample([1, CUBE_LEN], 2)
     clt = "h{}{}{}".format(clt_x, clt_y, clt_board)
     srv_init = "h{}{}{}".format(srv_x, srv_y, srv_board)
     srv_ip = "10.{}.{}.{}".format(srv_init[1], srv_init[2], srv_init[3])
@@ -107,15 +123,16 @@ def distributed_mode(topo, emu):
             bw = last_valid_bw_distributed
         else:
             last_valid_bw_distributed = bw
-        energy = sum(
-            [topo.get_link_energy_cost(clt, srv_init),
-             emu._query_power(clt), emu._query_power(srv_init)]
-        )
+
+        proc_energy = len(path) * (work_power_base + random.random()) + (27 - len(path)) * (idle_power_base)
+        energy = proc_energy + topo.get_link_energy_cost(clt, srv_init)
+        print("Path len: {}, Proc energy: {}, energy: {}".format(len(path), proc_energy, energy))
+
         w_per_bit = (energy / bw) * 1000.0
-        print("Energy per byte: {} mW/byte".format(w_per_bit))
+        # print("Energy per byte: {} mW/byte".format(w_per_bit))
         w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_DISTRIBUTED
         w_per_bit = min(w_per_bit, 10)
-        post_state_global(w_per_bit, random.randint(50, 55), proc_info_list)
+        post_state_global(energy, random.randint(50, 55), proc_info_list)
         time.sleep(1)
 
     return clt, srv_init, srv_ip
@@ -133,6 +150,7 @@ def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
         time.sleep(1)
 
     srv_cur = srv_init
+
     for hop in hops:
         print("--- Migrate server from {} to {}. Namely from ID:{} to ID:{}".format(
             srv_cur, hop, topo.get_proc_id(srv_cur), topo.get_proc_id(hop)))
@@ -164,15 +182,16 @@ def centralized_mode(topo, emu, clt, srv_init, srv_init_ip):
                 bw = last_valid_bw_central
             else:
                 last_valid_bw_central = bw
-            energy = sum(
-                [topo.get_link_energy_cost(clt, srv_cur),
-                 emu._query_power(clt), emu._query_power(srv_cur)]
-            )
+
+            proc_energy = len(path) * (work_power_base + random.random()) + (27 - len(path)) * (idle_power_base)
+            energy = proc_energy + topo.get_link_energy_cost(clt, srv_cur)
+            print("Path len: {}, Proc energy: {}, energy: {}".format(len(path), proc_energy, energy))
+
             w_per_bit = (energy / bw) * 1000.0
-            print("Energy per byte: {} mW/byte".format(w_per_bit))
+            #print("Energy per byte: {} mW/byte".format(w_per_bit))
             w_per_bit = w_per_bit / ENERGY_SCALE_FACTOR_CENTRAL
             w_per_bit = min(w_per_bit, 10)
-            post_state_global(w_per_bit, random.randint(50, 55), proc_info_list)
+            post_state_global(energy, random.randint(50, 55), proc_info_list)
             time.sleep(1)
 
 
@@ -181,13 +200,17 @@ if __name__ == '__main__':
     loop_mode = True
 
     try:
-        emu = Emulator(mode="emu", remote_base_url="http://httpbin.org")
+        emu = Emulator(mode="test", remote_base_url="http://httpbin.org")
         emu._url_create_flow = "put"
         emu._url_push_processor_info = "put"
         topo = HAECCube(
-            host_type="process", board_len=3,
+            host_type="process", board_len=CUBE_LEN, board_num=CUBE_LEN,
             intra_board_topo="mesh",
-            link_energy_cost=(15.0, 15.0, 60)
+            link_energy_cost=(
+            2 * 112.5 / 1000.0 ,
+            2 * 112.5 / 1000.0,
+            2 * 2400 / 1000.0
+            )
         )
         exp_info = ExpInfo("hace_cube_link_energy", None,
                            topo, "process", None, None)

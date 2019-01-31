@@ -39,6 +39,9 @@ BLACK_LIST = [
     "192.168.0.101", "192.168.0.102"
 ]
 
+BLACK_LIST.extend(["192.168.1.%s" % x for x in range(0, 51)])
+
+
 # number of times for connection
 env.connection_attempts = 1
 # skip the unavailable hosts
@@ -49,7 +52,7 @@ WORKER_ROLE_FILE = "./workers.txt"
 WORKER_USER = "odroid"
 SSH_PORT = "22"
 
-with open("./workers.txt", "r") as f:
+with open("./workers.txt", "r+") as f:
     WORKERS = [w.strip() for w in f.readlines()]
     if not WORKERS:
         print("[WARN] No workers in the workers.txt")
@@ -214,7 +217,7 @@ def put_mxn_cfg(local_path="./MaxiNet.cfg"):
 
 @task
 # @parallel
-def setup_mxn_worker():
+def setup_mxn_worker(containernet=False):
     """Setup MaxiNet worker on the Odroid
 
     Containernet, MaxiNet should be installed on each worker odroid.
@@ -231,33 +234,38 @@ def setup_mxn_worker():
             sudo(
                 "echo \"odroid ALL=(ALL) NOPASSWD:ALL\" | tee /etc/sudoers.d/odroid"
             )
-        if not files.exists('~/containernet'):
-            sudo("apt-get update")
-            sudo("dpkg --configure -a")
-            sleep(3)
-            sudo("apt-get install -y git ansible bash-completion")
-            cmd = []
-            cmd.append(
-                "git clone https://github.com/containernet/containernet.git ~/containernet"
-            )
-            cmd.append(
-                "sed -i -e 's/amd64/armhf/g' ~/containernet/ansible/install.yml"
-            )
-            cmd.append(
-                "sed -i -e 's/iproute/iproute2/g' ~/containernet/util/install.sh"
-            )
-            cmd.append("cd ~/containernet/ansible/")
-            cmd.append(
-                "sudo ansible-playbook -i \"localhost,\" -c local install.yml")
-            run("\n".join(cmd))
+
+        if containernet:
+            if not files.exists('~/containernet'):
+                sudo("apt-get update")
+                sudo("dpkg --configure -a")
+                sleep(3)
+                sudo("apt-get install -y git ansible bash-completion")
+                cmd = []
+                cmd.append(
+                    "git clone https://github.com/containernet/containernet.git ~/containernet"
+                )
+                cmd.append(
+                    "sed -i -e 's/amd64/armhf/g' ~/containernet/ansible/install.yml"
+                )
+                cmd.append(
+                    "sed -i -e 's/iproute/iproute2/g' ~/containernet/util/install.sh"
+                )
+                cmd.append("cd ~/containernet/ansible/")
+                cmd.append(
+                    "sudo ansible-playbook -i \"localhost,\" -c local install.yml")
+                run("\n".join(cmd))
+            else:
+                print("Containernet is already installed. Output of 'sudo mn -c'.")
+                ret = sudo("mn -c")
+                print(ret)
         else:
-            print("Containernet is already installed. Output of 'sudo mn -c'.")
-            ret = sudo("mn -c")
-            print(ret)
+            put("./install_maxinet.sh", "~/install_maxinet.sh")
+            run("bash ~/install_maxinet.sh -mn")
 
         if not files.exists("~/MaxiNet"):
             put("./install_maxinet.sh", "~/install_maxinet.sh")
-            run("bash ~/install_maxinet.sh -nn")
+            run("bash ~/install_maxinet.sh -mmm")
         else:
             print("MaxiNet is already installed.")
 
@@ -281,12 +289,13 @@ def cleanup_mn():
 
 
 @task
-def check_mxn_status():
+def check_mxn_status(containernet=False):
     """Check MaxiNet Status"""
     with settings(hide('warnings', 'running', 'stdout')):
         print("# Check MaxiNetWorker proc")
         print(sudo("ps aux | grep [M]axiNetWorker"))
 
+    if containernet:
         print("# Check running containers")
         print(sudo("docker container ls"))
 
@@ -310,6 +319,22 @@ def enable_mxn_worker_service():
 	run("sudo systemctl status maxinet-worker.service")
 
 @task
+def disable_mxn_worker_service():
+    with settings(hide('warnings', 'running', 'stdout')):
+	run("sudo systemctl disable maxinet-worker.service")
+
+@task
 def restart_worker_service():
     with settings(hide('warnings', 'running', 'stdout')):
 	run("sudo systemctl restart maxinet-worker.service")
+
+@task
+def stop_worker_service():
+    with settings(hide('warnings', 'running', 'stdout')):
+	run("sudo systemctl stop maxinet-worker.service")
+
+@task
+def get_link_info():
+    with settings(hide('warnings', 'running', 'stdout')):
+        print(sudo("ip link"))
+        print(sudo("dmesg | tail -n 20"))
