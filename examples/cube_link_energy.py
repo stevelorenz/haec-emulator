@@ -23,10 +23,10 @@ CUBE_LEN = 4  # number of nodes = (CUBE_LEN) ** 3
 
 # MARK: Change NO_FRONDEND to False and change the FRONTEND_URL before running
 # the demo, NO_FRONDEND is used for debugging and local testing
-NO_FRONDEND = True
-FRONTEND_URL = "http://192.168.0.100:8080"
-BACKEND_URL = "http://192.168.0.102:8080"
-BACKEND_IP = "192.168.0.102"
+NO_FRONDEND = False
+FRONTEND_URL = "http://192.168.1.10:8080"
+#BACKEND_URL = "http://192.168.1.2:8080"
+#BACKEND_IP = "192.168.1.2"
 DEFAULT_MODE = "distributed"
 
 MIGRATE_PERIOD = 2  # second

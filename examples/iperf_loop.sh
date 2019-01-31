@@ -18,12 +18,12 @@ if [[ "$1" == "run" ]]; then
 
 elif [[ "$1" == "stop" ]]; then
     echo "Stop iperf traffic generator"
-    ssh "odroid@$ODROID_P3_N2" killall iperf3
+    ssh "odroid@$ODROID_P3_N2" killall iperf
     ssh "odroid@$ODROID_P3_N2" killall nohup
     ssh "odroid@$ODROID_P3_N2" killall run_iperf_client.sh
     ssh "odroid@$ODROID_P3_N2" killall run_iperf_server.sh
 
-    ssh "odroid@$ODROID_P3_N14" killall iperf3
+    ssh "odroid@$ODROID_P3_N14" killall iperf
     ssh "odroid@$ODROID_P3_N14" killall nohup
     ssh "odroid@$ODROID_P3_N14" killall run_iperf_client.sh
     ssh "odroid@$ODROID_P3_N14" killall run_iperf_server.sh

@@ -1,0 +1,57 @@
+# Workflow to run Demos
+
+Network configuration: 
+    - Router: 192.168.1.1 LAN: 192.168.1.0/24 Username:admin Password: admin
+    - Playground switches: 192.168.1.5
+    - Unity Frontend: 192.168.1.10:8080
+    - haec1: 192.168.1.2
+    - Controller odroid of playground 1, 2, 3, 4 : 192.168.1.11, 12, 13, 14
+    - Odroids: Randomly get IP via DHCP, normally in the range of 192.168.1.100-250
+    - Specific two odroids for iperf Demo:
+        - odroid@odroid-001e06300320 (playground 3, number 2): 192.168.1.106
+        - odroid@odroid-001e06300409 (playground 3, number 14): 192.168.1.113
+
+DHCP is enabled for the router, these addresses are reserved in the router's configuration.
+
+In order to run MaxiNet properly, login with user odroid (can run sudo without password)
+
+## Demo 1: Process migration with SDN
+
+Run fowllowing commands ONLY in the controller (black box with the label haec1)
+after all odroids booted up.
+
+1. Turn on all odroids with script /home/odroid/playground_docs_zuo/turn_all_on.sh
+The list of hosts is stored in /home/odroid/playground_docs_zuo/playground_hosts
+
+2. Start MaxiNet Frontend server and worker using systemctl
+
+$ sudo systemctl restart maxinet-frontend.service
+$ sudo systemctl restart maxinet-worker.service
+
+3. Check the status with: $ MaxiNetStatus, no error messages is OK.
+
+4. Run the emulation script:
+
+$ python /home/odroid/haec-emulator/examples/cube_link_energy.py
+
+WARN: In order to use the frontend, the IP of the Frontend should be configured in the cube_link_energy.py Check the line 24 in the script.
+
+5. Hope nothing goes run...
+
+## Demo 2: Iperf in a loop
+
+Plug the USB ethernet cable: First Left! After booting.
+
+1. If two odroids with USB boot and run successfully. Just run the bash script
+
+$ bash /home/odroid/haec-emulator/examples/iperf_loop.sh run
+
+2. If the networking stuff not work properly (handled by networking.service), try reconfigure it:
+
+$ bash /home/odroid/haec-emulator/examples/iperf_loop.sh net
+
+3. Stop the processes using:
+
+$ bash /home/odroid/haec-emulator/examples/iperf_loop.sh stop
+
+Enjoy it...

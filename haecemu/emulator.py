@@ -99,6 +99,9 @@ class Emulator(object):
 
         Commuinicate with Controller through REST API
         """
+        # Avoid the Ryu manager is not properly closed and address conflicts
+        # subprocess.run(shlex.split("sudo killall ryu"))
+        # subprocess.run(shlex.split("sudo killall ryu-manager"))
         if not hasattr(topo, "ctl_prog"):
             logger.info(
                 "Can not find bound controller program. Use default: {}".format(
@@ -240,9 +243,6 @@ class Emulator(object):
             "[PRE_EXP_SETUP] Run mininet cleanup on frontend and all workers")
 
         subprocess.check_call(shlex.split("sudo mn -c"))
-        # Avoid the Ryu manager is not properly closed and address conflicts
-        subprocess.run(shlex.split("sudo killall ryu"))
-        subprocess.run(shlex.split("sudo killall ryu-manager"))
         for wk in self._cur_cluster.worker:
             wk.run_cmd("sudo mn -c")
 
